@@ -1,0 +1,7 @@
+https://github.com/ubicomplab/rPPG-Toolbox (supports a lot of tools already so check repo before lookign into other repos for example factorizePhys already available here)
+https://github.com/qcomas7/BeatFormer
+https://github.com/WeiQian98/FreqPhys
+https://github.com/KegangWangCCNU/ME-rPPG
+https://github.com/KegangWangCCNU/open-rppg (claims to already support ME-rppg)
+https://github.com/PhysiologicAILab/FactorizePhys
+https://github.com/Building-Robotics-Lab/flexible_rPPG
