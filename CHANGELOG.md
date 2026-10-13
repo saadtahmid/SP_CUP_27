@@ -10,7 +10,7 @@ This document serves as the **single authoritative source of truth** for trackin
 
 ### Summary of Major Milestones Achieved
 - **UBFC 42-Subject Benchmark Complete**: Validated 5-stage ablation progression across all 42 subjects in UBFC-rPPG:
-  $$\text{POS+FFT: } 14.92\,\text{BPM} \longrightarrow \text{POS+CZT: } 12.87\,\text{BPM} \longrightarrow \text{CHROM+CZT: } 7.95\,\text{BPM} \longrightarrow \text{ME-rPPG: } 6.65\,\text{BPM} \longrightarrow \text{Hybrid\_v3: } \mathbf{5.45\,\text{BPM}}\text{ MAE}, r = \mathbf{0.876}$$
+  $$\text{POS+FFT: } 14.92\,\text{BPM} \longrightarrow \text{POS+CZT: } 12.87\,\text{BPM} \longrightarrow \text{CHROM+CZT: } 7.95\,\text{BPM} \longrightarrow \text{ME-rPPG: } 6.65\,\text{BPM} \longrightarrow \text{Hybrid v3: } \mathbf{5.45\,\text{BPM}}\quad (\text{MAE}), \quad r = \mathbf{0.876}$$
 - **Round 1 Official Submission Bundle Packaged**: Generated on real $1280 \times 720$ HD video of `subject20` with cross-correlation causal lag compensation ($\approx 2.3\,\text{s}$ CMS50E oximeter display delay):
   - **Pearson $r = \mathbf{0.9258}$** ($> 0.90$)
   - **MAE = $\mathbf{1.84\,\text{BPM}}$** ($< 2.0\,\text{BPM}$)
