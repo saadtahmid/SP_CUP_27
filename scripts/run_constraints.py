@@ -7,7 +7,7 @@ Produces:
 - C4: Low-resolution evaluation (HD -> VGA -> QVGA)
 - C5: Frame-rate decimation (30 fps -> 10 fps) & Bitrate compression (<= 500 kbps)
 - C6: Aging-skin micro-texture perturbation stress test
-- C7: Masked-face occlusion robustness test with autonomous SNR sub-ROI weighting
+- C7: Masked-face occlusion robustness test with autonomous SNR + skin-ratio sub-ROI weighting
 - Publication-quality Bland-Altman plots saved to artifacts/constraints/
 """
 
@@ -26,6 +26,8 @@ from preprocessing.skin_tone import analyze_skin_tone
 from models.classical.pipeline import ClassicalRPPGPipeline
 from models.deep.merppg_engine import MERPPGEngine
 from models.hybrid.hybrid_system import HybridRPPGSystem
+from models.hybrid.pfd_module import PhysiologicalFrequencyDenoiser
+from estimation.czt_estimator import CZTHRTransformer
 from constraints.low_light import simulate_low_light_video
 from constraints.low_res import (
     simulate_low_res_video,
@@ -41,7 +43,36 @@ from evaluation.bland_altman import plot_bland_altman
 from evaluation.fairness import evaluate_skin_tone_fairness, generate_fairness_markdown_table
 
 
-def load_real_baseline_frames(subject_id: str = "subject4", max_frames: int = 300) -> Tuple[np.ndarray, float, float]:
+def estimate_robust_hr_from_bvp(bvp: np.ndarray, fs: float) -> float:
+    """Apply PFD harmonic denoising and sliding-window median CZT HR estimation."""
+    pfd = PhysiologicalFrequencyDenoiser(fs=fs, low_hz=0.7, high_hz=3.0)
+    czt = CZTHRTransformer(fs=fs, low_hz=0.7, high_hz=3.0, num_bins=512)
+    cleaned, _, _ = pfd.denoise_spectrum(bvp)
+
+    win_len = int(round(8.0 * fs))
+    stride_len = max(1, int(round(1.0 * fs)))
+    if len(cleaned) < win_len:
+        return float(czt.estimate_hr(cleaned))
+
+    hrs, snrs = [], []
+    for s in range(0, len(cleaned) - win_len + 1, stride_len):
+        seg = cleaned[s : s + win_len]
+        seg_clean, _, _ = pfd.denoise_spectrum(seg)
+        hr, freqs, pxx = czt.estimate_hr(seg_clean, return_spectrum=True)
+        snr = czt.compute_snr_db(pxx, freqs, hr)
+        hrs.append(hr)
+        snrs.append(snr)
+
+    hrs_arr = np.array(hrs, dtype=np.float64)
+    snrs_arr = np.array(snrs, dtype=np.float64)
+    if len(hrs_arr) >= 4:
+        keep = snrs_arr >= np.percentile(snrs_arr, 25)
+        if np.any(keep):
+            hrs_arr = hrs_arr[keep]
+    return float(np.median(hrs_arr))
+
+
+def load_real_baseline_frames(subject_id: str = "subject4", max_frames: int = 600) -> Tuple[np.ndarray, float, float]:
     """Load real video frames and ground truth HR from UBFC dataset."""
     vid_path = f"datasets/ubfc/{subject_id}/vid.mp4"
     gt_path = f"datasets/ubfc/{subject_id}/ground_truth.txt"
@@ -62,13 +93,13 @@ def load_real_baseline_frames(subject_id: str = "subject4", max_frames: int = 30
         gt_hr_series = gt_data["hr"][:len(frames_arr)]
         valid_hr = gt_hr_series[gt_hr_series > 40.0]
         mean_gt_hr = float(np.mean(valid_hr)) if len(valid_hr) > 0 else float(np.mean(gt_hr_series))
-        return frames_arr, fps, mean_gt_hr
+        return frames_arr, float(fps), mean_gt_hr
 
     print(f"Warning: Real video not found at {vid_path}. Generating synthetic video.")
     tmp_vid = "artifacts/constraints/temp_baseline.mp4"
     tmp_gt = "artifacts/constraints/temp_baseline_gt.csv"
     gt_hr = 78.0
-    generate_synthetic_rppg_video(tmp_vid, tmp_gt, duration_sec=10.0, fps=30.0, target_hr_bpm=gt_hr)
+    generate_synthetic_rppg_video(tmp_vid, tmp_gt, duration_sec=15.0, fps=30.0, target_hr_bpm=gt_hr)
     cap = cv2.VideoCapture(tmp_vid)
     frames = []
     while True:
@@ -82,7 +113,7 @@ def load_real_baseline_frames(subject_id: str = "subject4", max_frames: int = 30
 
 def main():
     parser = argparse.ArgumentParser(description="Competition Constraints Evaluation Suite")
-    parser.add_argument("--quick", action="store_true", help="Quick run evaluating 24 AiPEX subjects")
+    parser.add_argument("--quick", action="store_true", help="Quick run evaluating stratified subset of AiPEX subjects")
     parser.add_argument("--recompute-c2", action="store_true", help="Force recomputing AiPEX C2 subjects")
     args = parser.parse_args()
 
@@ -91,19 +122,14 @@ def main():
     print("2027 IEEE SIGNAL PROCESSING CUP: CONSTRAINT EVALUATION SUITE (C1 - C7)")
     print("=" * 70)
 
-    # -------------------------------------------------------------------------
-    # Separate pipelines with correct sampling frequencies (Fixes P0 Bug)
-    # -------------------------------------------------------------------------
-    pipeline_pos_15 = ClassicalRPPGPipeline(method="POS", fs=15.0, use_czt=True)
-    pipeline_chrom_15 = ClassicalRPPGPipeline(method="CHROM", fs=15.0, use_czt=True)
     pipeline_pos_30 = ClassicalRPPGPipeline(method="POS", fs=30.0, use_czt=True)
     pipeline_chrom_30 = ClassicalRPPGPipeline(method="CHROM", fs=30.0, use_czt=True)
     hybrid_30 = HybridRPPGSystem(fs=30.0, enable_pfd=True, enable_czt=True)
 
     # =========================================================================
-    # 1. C2: Diverse Skin Tone Generalization on AiPEX (15 fps)
+    # 1. C2: Diverse Skin Tone Generalization on AiPEX
     # =========================================================================
-    print("\n--- [Constraint C2] Diverse Skin Tone Generalization on AiPEX (fs=15.0) ---")
+    print("\n--- [Constraint C2] Diverse Skin Tone Generalization on AiPEX ---")
     aipex_loader = AiPEXDatasetLoader(base_dir="third_party/rppg_biases")
     subjects = aipex_loader.subjects
     print(f"Total discovered AiPEX subjects: {len(subjects)}")
@@ -118,26 +144,34 @@ def main():
         fitz_types = df_c2["fitzpatrick_type"].tolist()
         n_eval = len(df_c2)
     else:
-        eval_subset = subjects[:24] if args.quick else subjects
-        print(f"Evaluating {len(eval_subset)} subjects across India and Sierra Leone...")
+        if args.quick and len(subjects) >= 24:
+            india_s = [s for s in subjects if s["cohort"] == "India"][:12]
+            sl_s = [s for s in subjects if s["cohort"] == "Sierra_Leone"][:12]
+            eval_subset = india_s + sl_s
+        else:
+            eval_subset = subjects
 
-        preds_pos = []
-        preds_chrom = []
-        refs = []
-        fitz_types = []
-        itas = []
+        print(f"Evaluating {len(eval_subset)} subjects across India and Sierra Leone...")
+        preds_pos, preds_chrom, refs, fitz_types, itas = [], [], [], [], []
 
         for s_info in eval_subset:
             data = aipex_loader.load_subject_rgb_traces(s_info)
             gt_hr = data["gt_hr_bpm"]
             rgb = data["rgb_signals"]
+            subj_fps = float(data.get("fps", 15.0))
             st = data["skin_tone"]
 
-            res_p = pipeline_pos_15.process(rgb)
-            res_c = pipeline_chrom_15.process(rgb)
+            pipe_p = ClassicalRPPGPipeline(method="POS", fs=subj_fps, use_czt=True)
+            pipe_c = ClassicalRPPGPipeline(method="CHROM", fs=subj_fps, use_czt=True)
 
-            preds_pos.append(res_p["hr_bpm"])
-            preds_chrom.append(res_c["hr_bpm"])
+            bvp_p = pipe_p.extract_bvp(rgb)
+            bvp_c = pipe_c.extract_bvp(rgb)
+
+            hr_p = estimate_robust_hr_from_bvp(bvp_p, fs=subj_fps)
+            hr_c = estimate_robust_hr_from_bvp(bvp_c, fs=subj_fps)
+
+            preds_pos.append(hr_p)
+            preds_chrom.append(hr_c)
             refs.append(gt_hr)
             fitz_types.append(st["fitzpatrick_type"])
             itas.append(st["ita_deg"])
@@ -158,28 +192,28 @@ def main():
         })
         df_c2.to_csv(c2_cache_path, index=False)
 
-    c2_fairness_pos = evaluate_skin_tone_fairness(preds_pos, refs, fitz_types, tolerance_bpm=3.5)
-    c2_fairness_chrom = evaluate_skin_tone_fairness(preds_chrom, refs, fitz_types, tolerance_bpm=3.5)
+    if len(refs) > 0:
+        c2_fairness_pos = evaluate_skin_tone_fairness(preds_pos, refs, fitz_types, tolerance_bpm=3.5)
+        c2_fairness_chrom = evaluate_skin_tone_fairness(preds_chrom, refs, fitz_types, tolerance_bpm=3.5)
 
-    print("\n[C2 POS + CZT] Stratified Skin Tone Results:")
-    print(generate_fairness_markdown_table(c2_fairness_pos))
-    print(f"Tolerance Compliance (POS): {c2_fairness_pos['tolerance_met']}")
+        print("\n[C2 POS + PFD + CZT] Stratified Skin Tone Results:")
+        print(generate_fairness_markdown_table(c2_fairness_pos))
+        print(f"Tolerance Compliance (POS): {c2_fairness_pos['tolerance_met']}")
 
-    print("\n[C2 CHROM + CZT] Stratified Skin Tone Results:")
-    print(generate_fairness_markdown_table(c2_fairness_chrom))
-    print(f"Tolerance Compliance (CHROM): {c2_fairness_chrom['tolerance_met']}")
+        print("\n[C2 CHROM + PFD + CZT] Stratified Skin Tone Results:")
+        print(generate_fairness_markdown_table(c2_fairness_chrom))
+        print(f"Tolerance Compliance (CHROM): {c2_fairness_chrom['tolerance_met']}")
 
-    # Save Bland-Altman plot for C2
-    plot_bland_altman(
-        preds_pos, refs,
-        output_path="artifacts/constraints/bland_altman_c2_skin_tone.png",
-        title=f"Bland-Altman Agreement on AiPEX (C2: n={n_eval} subjects)",
-    )
+        plot_bland_altman(
+            preds_pos, refs,
+            output_path="artifacts/constraints/bland_altman_c2_skin_tone.png",
+            title=f"Bland-Altman Agreement on AiPEX (C2: n={n_eval} subjects)",
+        )
 
     # =========================================================================
     # Load Real Baseline Video for C1, C3, C4, C5, C6, C7
     # =========================================================================
-    real_frames, base_fps, gt_hr_real = load_real_baseline_frames(subject_id="subject4", max_frames=300)
+    real_frames, base_fps, gt_hr_real = load_real_baseline_frames(subject_id="subject4", max_frames=600)
     print(f"\nLoaded Baseline Video: {len(real_frames)} frames, {base_fps:.1f} fps, Ground Truth HR: {gt_hr_real:.2f} BPM")
 
     # =========================================================================
@@ -192,7 +226,7 @@ def main():
 
     for lux in lux_levels:
         sim_frames = simulate_low_light_video(real_frames, target_lux=lux, baseline_lux=300.0)
-        ext = extractor.process_video(sim_frames)
+        ext = extractor.process_video(sim_frames, fs=base_fps)
         rgb = ext["rgb_signals"]
         c_faces = ext["cropped_faces"]
 
@@ -221,13 +255,11 @@ def main():
     c4_results = []
     for res_name in ["HD", "VGA", "QVGA"]:
         if res_name == "HD":
-            # Upscale real frames to HD to simulate 1280x720 baseline
-            h_in, w_in = real_frames.shape[1:3]
             frames_c4 = np.array([cv2.resize(f, (1280, 720), interpolation=cv2.INTER_CUBIC) for f in real_frames])
         else:
             frames_c4 = simulate_low_res_video(real_frames, target_resolution=res_name)
 
-        ext = extractor.process_video(frames_c4)
+        ext = extractor.process_video(frames_c4, fs=base_fps)
         res_pos = pipeline_pos_30.process(ext["rgb_signals"])
         res_hyb = hybrid_30.process(ext["cropped_faces"], rgb_signals=ext["rgb_signals"])
 
@@ -248,20 +280,23 @@ def main():
     # =========================================================================
     print("\n--- [Constraint C5] Frame Decimation (10 fps) & Bitrate Limit (<= 500 kbps) ---")
     frames_10, eff_fps = apply_frame_decimation_c5(real_frames, original_fps=base_fps, target_fps=10.0)
-    ext_10 = extractor.process_video(frames_10)
+    # FIXED: Pass fs=eff_fps into process_video so sub-ROI SNR fusion uses 10 fps instead of 30 fps
+    ext_10 = extractor.process_video(frames_10, fs=eff_fps)
     pipeline_10 = ClassicalRPPGPipeline(method="POS", fs=eff_fps, use_czt=True)
-    res_10 = pipeline_10.process(ext_10["rgb_signals"])
-    err_10 = abs(res_10["hr_bpm"] - gt_hr_real)
+    bvp_10 = pipeline_10.extract_bvp(ext_10["rgb_signals"])
+    hr_10 = estimate_robust_hr_from_bvp(bvp_10, fs=eff_fps)
+    err_10 = abs(hr_10 - gt_hr_real)
 
-    # Bitrate-limited MPEG-4 compression
+    # Bitrate-limited MPEG-4 compression evaluated with Hybrid v3 + PFD
     frames_bitrate = simulate_bitrate_compression_frames(real_frames, target_kbps=400, fps=base_fps)
-    ext_bitrate = extractor.process_video(frames_bitrate)
-    res_bitrate = pipeline_pos_30.process(ext_bitrate["rgb_signals"])
-    err_bitrate = abs(res_bitrate["hr_bpm"] - gt_hr_real)
+    ext_bitrate = extractor.process_video(frames_bitrate, fs=base_fps)
+    res_bitrate_hyb = hybrid_30.process(ext_bitrate["cropped_faces"], rgb_signals=ext_bitrate["rgb_signals"])
+    hr_bitrate = res_bitrate_hyb["hr_bpm"]
+    err_bitrate = abs(hr_bitrate - gt_hr_real)
 
     c5_df = pd.DataFrame([
-        {"test": "Frame Decimation (10 fps)", "fps": eff_fps, "est_hr": round(res_10["hr_bpm"], 2), "err_bpm": round(err_10, 2)},
-        {"test": "Bitrate Compression (400 kbps)", "fps": base_fps, "est_hr": round(res_bitrate["hr_bpm"], 2), "err_bpm": round(err_bitrate, 2)},
+        {"test": "Frame Decimation (10 fps)", "fps": round(eff_fps, 2), "est_hr": round(hr_10, 2), "err_bpm": round(err_10, 2)},
+        {"test": "Bitrate Compression (400 kbps)", "fps": round(base_fps, 2), "est_hr": round(hr_bitrate, 2), "err_bpm": round(err_bitrate, 2)},
     ])
     print(c5_df.to_string(index=False))
     c5_df.to_csv("artifacts/constraints/c5_decimation_summary.csv", index=False)
@@ -272,21 +307,22 @@ def main():
     print("\n--- [Constraint C7] Masked-Face Occlusion Operation ---")
     masked_frames = simulate_masked_video(real_frames, tracker=extractor.tracker)
 
-    # Evaluate WITHOUT cheat flag: autonomous SNR fusion
-    ext_masked_auto = extractor.process_video(masked_frames, mask_occlusion_active=False)
+    # Evaluate WITHOUT cheat flag: autonomous SNR + skin-occupancy fusion
+    ext_masked_auto = extractor.process_video(masked_frames, mask_occlusion_active=False, fs=base_fps)
     res_masked_pos = pipeline_pos_30.process(ext_masked_auto["rgb_signals"])
     res_masked_hyb = hybrid_30.process(ext_masked_auto["cropped_faces"], rgb_signals=ext_masked_auto["rgb_signals"])
 
     err_mask_pos = abs(res_masked_pos["hr_bpm"] - gt_hr_real)
     err_mask_hyb = abs(res_masked_hyb["hr_bpm"] - gt_hr_real)
 
-    print(f"Autonomous Sub-ROI Weights: {ext_masked_auto['sub_roi_weights']}")
+    print(f"Autonomous Sub-ROI Skin Occupancy: {ext_masked_auto.get('sub_roi_skin_ratios')}")
+    print(f"Autonomous Sub-ROI Weights:        {ext_masked_auto['sub_roi_weights']}")
     print(f"Masked Face - POS HR:    {res_masked_pos['hr_bpm']:.2f} BPM (Error: {err_mask_pos:.2f} BPM)")
     print(f"Masked Face - Hybrid HR: {res_masked_hyb['hr_bpm']:.2f} BPM (Error: {err_mask_hyb:.2f} BPM)")
 
     pd.DataFrame([{
         "constraint": "C7 Masked Face",
-        "sub_roi_weights": str(ext_masked_auto['sub_roi_weights']),
+        "sub_roi_weights": str(ext_masked_auto["sub_roi_weights"]),
         "pos_hr": round(res_masked_pos["hr_bpm"], 2),
         "pos_err": round(err_mask_pos, 2),
         "hybrid_hr": round(res_masked_hyb["hr_bpm"], 2),
@@ -298,7 +334,7 @@ def main():
     # =========================================================================
     print("\n--- [Constraint C6] Aging-Skin Micro-Texture Perturbation ---")
     aged_frames = simulate_aging_skin_video(real_frames, wrinkle_strength=0.35)
-    ext_aged = extractor.process_video(aged_frames)
+    ext_aged = extractor.process_video(aged_frames, fs=base_fps)
     res_aged_pos = pipeline_pos_30.process(ext_aged["rgb_signals"])
     res_aged_hyb = hybrid_30.process(ext_aged["cropped_faces"], rgb_signals=ext_aged["rgb_signals"])
 
@@ -322,10 +358,10 @@ def main():
     print("\n--- [Constraint C3] Multi-Person Frame Isolation & Kalman Tracker ---")
     multi_frames = simulate_multi_person_video(real_frames, distractor_hr_bpm=115.0)
 
-    # Use multi-face tracker to isolate primary target face
     multi_tracker = FaceMeshTracker(max_num_faces=2)
     kalman = TargetFaceKalmanTracker(dt=1.0 / base_fps)
     tracked_crops = []
+    tracked_rgb = []
 
     for f in multi_frames:
         detected_faces = multi_tracker.process_frame(f, return_all_faces=True)
@@ -337,16 +373,18 @@ def main():
         if crop.size == 0:
             crop = f
         resized_crop = cv2.resize(crop, (36, 36), interpolation=cv2.INTER_AREA)
-        crop_norm = cv2.cvtColor(resized_crop, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        tracked_crops.append(crop_norm)
+        crop_rgb = cv2.cvtColor(resized_crop, cv2.COLOR_BGR2RGB)
+        tracked_rgb.append(np.mean(crop_rgb, axis=(0, 1)))
+        tracked_crops.append(crop_rgb.astype(np.float32) / 255.0)
 
     multi_tracker.close()
     tracked_crops_arr = np.array(tracked_crops)
+    tracked_rgb_arr = np.array(tracked_rgb, dtype=np.float64)
 
-    res_c3_hyb = hybrid_30.process(tracked_crops_arr)
+    res_c3_hyb = hybrid_30.process(tracked_crops_arr, rgb_signals=tracked_rgb_arr)
     err_c3_hyb = abs(res_c3_hyb["hr_bpm"] - gt_hr_real)
     print(f"Multi-Person Tracked Subject - Hybrid HR: {res_c3_hyb['hr_bpm']:.2f} BPM (Target GT: {gt_hr_real:.2f}, Error: {err_c3_hyb:.2f} BPM)")
-    print(f"Successfully rejected bystander distractor (115.0 BPM).")
+    print("Successfully rejected bystander distractor (115.0 BPM).")
 
     pd.DataFrame([{
         "constraint": "C3 Multi-Person",

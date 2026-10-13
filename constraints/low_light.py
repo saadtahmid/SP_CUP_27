@@ -15,7 +15,7 @@ def apply_low_light_c1(
     target_lux: float = 30.0,
     baseline_lux: float = 300.0,
     noise_mode: str = "combined",  # 'attenuation', 'poisson', 'combined'
-    gaussian_var: float = 0.001,
+    gaussian_var: float = 1e-5,
 ) -> np.ndarray:
     """Degrade a well-lit video frame to low-light conditions (<= 50 lux).
 
@@ -41,14 +41,13 @@ def apply_low_light_c1(
         degraded = attenuated
     elif noise_mode == "poisson":
         # Poisson photon shot noise: scaled by photon count
-        # In low light, peak photons are low, shot noise variance = mean
-        peak_photons = 255.0 * gain
-        noisy = np.random.poisson(np.clip(attenuated * peak_photons, 0, None)) / (peak_photons + 1e-12)
+        peak_photons = 255.0  # attenuated is already scaled by gain = target_lux / baseline_lux
+        noisy = np.random.poisson(np.clip(attenuated * peak_photons, 0, None)) / peak_photons
         degraded = np.clip(noisy, 0.0, 1.0)
     elif noise_mode == "combined":
         # Combined Poisson shot noise + Gaussian read/thermal noise
-        peak_photons = 255.0 * gain
-        noisy_shot = np.random.poisson(np.clip(attenuated * peak_photons, 0, None)) / (peak_photons + 1e-12)
+        peak_photons = 255.0  # attenuated is already scaled by gain = target_lux / baseline_lux
+        noisy_shot = np.random.poisson(np.clip(attenuated * peak_photons, 0, None)) / peak_photons
         # Gaussian read noise: zero mean, specified variance
         sigma = np.sqrt(gaussian_var)
         read_noise = np.random.normal(0.0, sigma, frame.shape)

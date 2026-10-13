@@ -87,11 +87,11 @@ class PhysiologicalFrequencyDenoiser:
             inband_indices = np.where(in_band)[0]
             peak_idx = inband_indices[np.argmax(mag_full[in_band])]
             peak_f = freqs[peak_idx]
-            if peak_f > 1.8:
+            if peak_f > 2.15:  # Only check for 2x dicrotic harmonic above 129 BPM
                 half_f = peak_f / 2.0
                 if half_f >= self.low_hz:
                     half_mag = float(np.interp(half_f, freqs, mag_full))
-                    if half_mag >= 0.65 * mag_full[peak_idx]:
+                    if half_mag >= 0.80 * mag_full[peak_idx]:
                         # Boost fundamental bin
                         half_idx = int(np.argmin(np.abs(freqs - half_f)))
                         G[half_idx] *= (1.0 + self.gamma_sub)

@@ -5,8 +5,9 @@ and RePSS (Zhang et al., 2024).
 
 Architecture:
 1. CZTLayer: Differentiable Chirp Z-Transform mapping RGB traces (L=150) to complex cardiac spectrum (M=128).
-2. ZOCA: Zoomed Orthonormal Complex Attention with fixed illumination row and learned chrominance projections.
-3. ESD: Energy Spectral Density feed-forward with spectral contribution gating (Eqs. 11-12).
+2. ZOCA: Zoomed Orthonormal Complex Attention with fixed illumination row, learned chrominance projections,
+   Min-Max-Norm scaling (Eq. 7), and 8-term complex attention expansion (Eq. 9).
+3. ESD: Energy Spectral Density feed-forward with true zero-anchored spectral gating (Eqs. 11-12).
 4. ICZTLayer: Regularized pseudoinverse time-domain BVP waveform reconstructor.
 """
 
@@ -53,17 +54,9 @@ class CZTLayer(nn.Module):
         self.register_buffer("freq_axis", torch.from_numpy(freq_axis.astype(np.float32)))
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Compute complex CZT spectrum.
-
-        Args:
-            x: Real tensor of shape (B, L, C) or (B, L).
-
-        Returns:
-            F_re, F_im: Real and imaginary parts of shape (B, M, C).
-        """
+        """Compute complex CZT spectrum."""
         if x.dim() == 2:
             x = x.unsqueeze(-1)
-        # x is (B, L, C), v_re is (M, L) -> F_re is (B, M, C)
         f_re = torch.einsum("blc,ml->bmc", x, self.v_re)
         f_im = torch.einsum("blc,ml->bmc", x, self.v_im)
         return f_re, f_im
@@ -102,15 +95,7 @@ class ICZTLayer(nn.Module):
         self.register_buffer("v_iczt_im", torch.from_numpy(np.imag(V_iczt).astype(np.float32)))
 
     def forward(self, f_re: torch.Tensor, f_im: torch.Tensor) -> torch.Tensor:
-        """Reconstruct real time-domain signal.
-
-        Args:
-            f_re: (B, M, C) or (B, M)
-            f_im: (B, M, C) or (B, M)
-
-        Returns:
-            x_recon: (B, L, C)
-        """
+        """Reconstruct real time-domain signal."""
         if f_re.dim() == 2:
             f_re = f_re.unsqueeze(-1)
             f_im = f_im.unsqueeze(-1)
@@ -161,16 +146,16 @@ class ZOCABlock(nn.Module):
 
         self.scale = 1.0 / np.sqrt(channels)
 
+    @staticmethod
+    def _min_max_norm(mat: torch.Tensor) -> torch.Tensor:
+        """Min-Max-Norm attention scaling (BeatFormer Eq. 7)."""
+        min_v = mat.amin(dim=-1, keepdim=True)
+        max_v = mat.amax(dim=-1, keepdim=True)
+        normed = (mat - min_v) / (max_v - min_v + 1e-8)
+        return normed / (normed.sum(dim=-1, keepdim=True) + 1e-8)
+
     def forward(self, f_re: torch.Tensor, f_im: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Apply complex self-attention over spectral representations.
-
-        Args:
-            f_re: (B, M, 3)
-            f_im: (B, M, 3)
-
-        Returns:
-            z_re, z_im: (B, M, 3)
-        """
+        """Apply 8-term complex self-attention over spectral representations (BeatFormer Eq. 9)."""
         x_re = f_re + self.pos_emb
         x_im = f_im
 
@@ -178,7 +163,6 @@ class ZOCABlock(nn.Module):
         W_k = self.proj_k.get_matrix()
         W_v = self.proj_v.get_matrix()
 
-        # Complex linear projection (B, M, 3) @ (3, 3) -> (B, M, 3)
         Q_re = torch.matmul(x_re, W_q)
         Q_im = torch.matmul(x_im, W_q)
         K_re = torch.matmul(x_re, W_k)
@@ -186,13 +170,27 @@ class ZOCABlock(nn.Module):
         V_re = torch.matmul(x_re, W_v)
         V_im = torch.matmul(x_im, W_v)
 
-        # Complex attention scores over frequency bins: (B, M, M)
-        S_re = (torch.bmm(Q_re, K_re.transpose(1, 2)) + torch.bmm(Q_im, K_im.transpose(1, 2))) * self.scale
-        attn = F.softmax(S_re, dim=-1)
+        # 8-term complex attention expansion (BeatFormer Eq. 9)
+        A_rr = self._min_max_norm(torch.bmm(Q_re, K_re.transpose(1, 2)) * self.scale)
+        A_ii = self._min_max_norm(torch.bmm(Q_im, K_im.transpose(1, 2)) * self.scale)
+        A_ri = self._min_max_norm(torch.bmm(Q_re, K_im.transpose(1, 2)) * self.scale)
+        A_ir = self._min_max_norm(torch.bmm(Q_im, K_re.transpose(1, 2)) * self.scale)
 
-        # Weighted values with residual connection
-        out_re = torch.bmm(attn, V_re) + f_re
-        out_im = torch.bmm(attn, V_im) + f_im
+        real_part = (
+            torch.bmm(A_rr, V_re)
+            - torch.bmm(A_ii, V_re)
+            - torch.bmm(A_ri, V_im)
+            - torch.bmm(A_ir, V_im)
+        ) * 0.5
+        imag_part = (
+            torch.bmm(A_rr, V_im)
+            - torch.bmm(A_ii, V_im)
+            + torch.bmm(A_ri, V_re)
+            + torch.bmm(A_ir, V_re)
+        ) * 0.5
+
+        out_re = real_part + f_re
+        out_im = imag_part + f_im
         return out_re, out_im
 
 
@@ -205,10 +203,9 @@ class ESDBlock(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
             nn.GELU(),
-            nn.Linear(hidden_dim, 2),  # Outputs real & imag for single fused subband
+            nn.Linear(hidden_dim, 2),
         )
         self.channel_fusion = nn.Linear(channels, 1, bias=False)
-        # Initialize channel fusion with standard physiological green-absorption prior
         with torch.no_grad():
             self.channel_fusion.weight.copy_(torch.tensor([[-0.2, 1.0, -0.2]]))
 
@@ -219,37 +216,26 @@ class ESDBlock(nn.Module):
         f_re: torch.Tensor,
         f_im: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Compute ESD gated spectrum and fuse channels (Eqs. 11-12).
-
-        Args:
-            z_re, z_im: Output of ZOCA (B, M, 3).
-            f_re, f_im: Original CZT spectrum (B, M, 3).
-
-        Returns:
-            spec_1d_re: (B, M, 1)
-            spec_1d_im: (B, M, 1)
-            psd: (B, M) power spectrum.
-        """
+        """Compute ESD gated spectrum and fuse channels (Eqs. 11-12)."""
         feat = torch.cat([z_re, z_im], dim=-1)  # (B, M, 6)
         z_prime = self.mlp(feat)  # (B, M, 2)
         zp_re = z_prime[..., 0:1]
         zp_im = z_prime[..., 1:2]
 
-        # Energy contribution weight per frequency bin S(f) = |Z'(f)|^2 / (|F(f)|^2 + eps)
+        # FIXED: Zero-anchored energy contribution weight S(f) = |Z'(f)|^2 / (|F(f)|^2 + |Z'(f)|^2 + eps)
+        # Maps 0 energy -> 0.0 weight (instead of sigmoid(0) = 0.5) while remaining bounded in [0, 1)
         energy_z = zp_re ** 2 + zp_im ** 2
         energy_f = torch.sum(f_re ** 2 + f_im ** 2, dim=-1, keepdim=True) + 1e-8
-        s_weight = torch.sigmoid(energy_z / energy_f)  # Stable bounded gating weight (0, 1)
+        s_weight = energy_z / (energy_f + energy_z + 1e-8)
 
         # Pulse signal filtering: F' = Norm(F * S)
         gated_re = f_re * s_weight
         gated_im = f_im * s_weight
 
-        # Normalize along frequency dimension (M)
         norm_factor = torch.norm(gated_re, dim=1, keepdim=True) + 1e-8
         gated_re = gated_re / norm_factor
         gated_im = gated_im / norm_factor
 
-        # Channel fusion to single BVP component
         spec_1d_re = self.channel_fusion(gated_re)  # (B, M, 1)
         spec_1d_im = self.channel_fusion(gated_im)  # (B, M, 1)
 
@@ -282,19 +268,7 @@ class BeatFormer(nn.Module):
         self.iczt = ICZTLayer(length=window_len, num_bins=num_bins, fs=fs, low_hz=low_hz, high_hz=high_hz)
 
     def forward(self, rgb_window: torch.Tensor) -> Dict[str, torch.Tensor]:
-        """Forward pass for a batch of 150-frame RGB traces.
-
-        Args:
-            rgb_window: Tensor of shape (B, L, 3).
-
-        Returns:
-            Dict containing:
-                'bvp_wave': reconstructed time-domain BVP (B, L, 1)
-                'psd': power spectral density in [low_hz, high_hz] (B, M)
-                'freq_axis': frequency bins in Hz (M,)
-                'ortho_loss': regularizer for ZOCA projections
-        """
-        # Ensure temporal zero-mean normalization (BeatFormer Eq. 4)
+        """Forward pass for a batch of 150-frame RGB traces."""
         if rgb_window.abs().mean() > 1.0:
             mean_c = rgb_window.mean(dim=1, keepdim=True) + 1e-8
             x = (rgb_window / mean_c) - 1.0
@@ -320,19 +294,8 @@ class BeatFormer(nn.Module):
         }
 
     def estimate_hr_from_trace(self, rgb_trace: np.ndarray, stride: int = 30) -> Tuple[float, np.ndarray, np.ndarray]:
-        """Inference method for arbitrary-length RGB traces using overlapping windows.
-
-        Args:
-            rgb_trace: (T, 3) numpy array.
-            stride: Stride between successive 150-frame evaluation windows.
-
-        Returns:
-            hr_bpm: Global estimated heart rate in BPM.
-            bvp_full: Reconstructed full-length BVP signal (T,).
-            psd_avg: Averaged power spectrum across windows (M,).
-        """
+        """Inference method for arbitrary-length RGB traces using overlapping windows."""
         self.eval()
-        # Temporally normalize RGB traces (BeatFormer Eq. 4)
         mean_c = np.mean(rgb_trace, axis=0, keepdims=True) + 1e-8
         trace_norm = (rgb_trace / mean_c) - 1.0
 
@@ -380,4 +343,3 @@ class BeatFormer(nn.Module):
         """Estimate single global heart rate in BPM from RGB trace."""
         hr_bpm, _, _ = self.estimate_hr_from_trace(rgb_trace, stride=stride)
         return hr_bpm
-

@@ -7,7 +7,7 @@ Each subject has 3 ROI video recordings:
 - rightcheek: video{N}_rightcheek.avi
 Ground truth mean heart rates stored in India_GT.csv and Sierra_Leone_GT.csv.
 
-Memory-optimized streaming reader: computes spatial averages per frame on the fly.
+Applies YCbCr + glare skin-pixel filtering per frame and dynamic SNR sub-ROI fusion.
 """
 
 import os
@@ -17,17 +17,19 @@ import numpy as np
 import pandas as pd
 
 from preprocessing.skin_tone import analyze_skin_tone
+from preprocessing.roi_extractor import filter_skin_pixels, fuse_sub_rois_by_snr
 
 
-def _read_video_mean_rgb(video_path: str) -> Tuple[np.ndarray, float, Optional[np.ndarray]]:
-    """Stream video and compute spatial mean RGB per frame with minimal memory footprint."""
+def _read_video_mean_rgb(video_path: str, max_frames: Optional[int] = 450) -> Tuple[np.ndarray, float, Optional[np.ndarray]]:
+    """Stream video and compute skin-filtered spatial mean RGB per frame."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         return np.zeros((0, 3)), 15.0, None
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 15.0
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 100
-    mid_idx = total_frames // 2
+    total_frames = int(cap.get(cv2.CAP_PROP_COUNT)) if hasattr(cv2, "CAP_PROP_COUNT") else int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 100)
+    effective_total = min(total_frames, max_frames) if max_frames else total_frames
+    mid_idx = max(0, effective_total // 2)
 
     means = []
     mid_frame_rgb = None
@@ -35,21 +37,23 @@ def _read_video_mean_rgb(video_path: str) -> Tuple[np.ndarray, float, Optional[n
 
     while True:
         ret, frame_bgr = cap.read()
-        if not ret:
+        if not ret or (max_frames is not None and idx >= max_frames):
             break
-        # Convert BGR mean to RGB mean: frame_bgr[:, :, ::-1].mean(axis=(0, 1))
-        # Equivalent: compute mean per channel directly
-        b = float(np.mean(frame_bgr[:, :, 0]))
-        g = float(np.mean(frame_bgr[:, :, 1]))
-        r = float(np.mean(frame_bgr[:, :, 2]))
-        means.append([r, g, b])
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        pix = frame_rgb.reshape(-1, 3)
+        filt_pix = filter_skin_pixels(pix)
+        if len(filt_pix) > 0:
+            mean_rgb = np.mean(filt_pix, axis=0)
+        else:
+            mean_rgb = np.mean(pix, axis=0)
+        means.append(mean_rgb)
 
         if idx == mid_idx:
-            mid_frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            mid_frame_rgb = frame_rgb
         idx += 1
 
     cap.release()
-    return np.array(means, dtype=np.float64), fps, mid_frame_rgb
+    return np.array(means, dtype=np.float64), float(fps), mid_frame_rgb
 
 
 class AiPEXDatasetLoader:
@@ -94,21 +98,29 @@ class AiPEXDatasetLoader:
                     })
         return subjects
 
-    def load_subject_rgb_traces(self, subject_info: Dict[str, any]) -> Dict[str, any]:
-        """Load and extract mean RGB traces across forehead and cheeks for a subject."""
-        fh_mean, fps, mid_frame = _read_video_mean_rgb(subject_info["forehead_video"])
+    def load_subject_rgb_traces(self, subject_info: Dict[str, any], max_frames: Optional[int] = 450) -> Dict[str, any]:
+        """Load and extract SNR-fused RGB traces across forehead and cheeks for a subject."""
+        fh_mean, fps, mid_frame = _read_video_mean_rgb(subject_info["forehead_video"], max_frames=max_frames)
+        lc_mean, _, _ = _read_video_mean_rgb(subject_info.get("leftcheek_video", ""), max_frames=max_frames)
+        rc_mean, _, _ = _read_video_mean_rgb(subject_info.get("rightcheek_video", ""), max_frames=max_frames)
 
-        lc_mean, _, _ = _read_video_mean_rgb(subject_info.get("leftcheek_video", ""))
-        rc_mean, _, _ = _read_video_mean_rgb(subject_info.get("rightcheek_video", ""))
+        min_len = len(fh_mean)
+        if len(lc_mean) > 0 and len(rc_mean) > 0:
+            min_len = min(len(fh_mean), len(lc_mean), len(rc_mean))
 
-        combined_mean = fh_mean
-        if len(lc_mean) == len(fh_mean) and len(rc_mean) == len(fh_mean) and len(fh_mean) > 0:
-            combined_mean = 0.5 * fh_mean + 0.25 * lc_mean + 0.25 * rc_mean
+        if min_len >= 30 and len(lc_mean) >= min_len and len(rc_mean) >= min_len:
+            sub_rois = {
+                "forehead": fh_mean[:min_len],
+                "left_cheek": lc_mean[:min_len],
+                "right_cheek": rc_mean[:min_len],
+            }
+            combined_mean, _ = fuse_sub_rois_by_snr(sub_rois, fs=fps)
+        else:
+            combined_mean = fh_mean
 
-        # Skin tone analysis on sample frame pixels
         if mid_frame is not None:
-            sample_skin = mid_frame.reshape(-1, 3)
-            skin_info = analyze_skin_tone(sample_skin)
+            sample_skin = filter_skin_pixels(mid_frame.reshape(-1, 3))
+            skin_info = analyze_skin_tone(sample_skin if len(sample_skin) > 0 else mid_frame.reshape(-1, 3))
         else:
             skin_info = {"ita_deg": 15.0, "fitzpatrick_type": "Type IV"}
 

@@ -15,6 +15,7 @@ import torch
 from models.deep.merppg_engine import MERPPGEngine
 from models.hybrid.pfd_module import PhysiologicalFrequencyDenoiser
 from models.hybrid.beatformer import BeatFormer
+from models.classical.pos import pos_process
 from estimation.czt_estimator import CZTHRTransformer
 
 
@@ -87,11 +88,15 @@ class HybridRPPGSystem:
         else:
             cleaned_bvp = raw_bvp
 
-        # Compute CZT spectrum for Branch 1
-        hr_me, freqs_czt, psd_me = self.czt.estimate_hr(cleaned_bvp, return_spectrum=True)
+        # Compute CZT spectrum for Branch 1 (freqs_czt is in BPM: [42.0, ..., 180.0])
+        if t_len >= int(10.0 * self.fs):
+            hr_me, hr_series_me = self.backbone.estimate_hr_windowed(cleaned_bvp)
+            _, freqs_czt, psd_me = self.czt.estimate_hr(cleaned_bvp, return_spectrum=True)
+        else:
+            hr_me, freqs_czt, psd_me = self.czt.estimate_hr(cleaned_bvp, return_spectrum=True)
         snr_me = self.czt.compute_snr_db(psd_me, freqs_czt, hr_me)
 
-        # Branch 2: BeatFormer Spectral Transformer
+        # Branch 2: BeatFormer Spectral Transformer + POS-PFD Chrominance Anchor
         if self.enable_beatformer:
             if rgb_signals is not None:
                 rgb_trace = rgb_signals
@@ -99,30 +104,45 @@ class HybridRPPGSystem:
                 rgb_trace = np.mean(cropped_faces, axis=(1, 2)) * 255.0
 
             hr_bf, bvp_bf, psd_bf = self.beatformer.estimate_hr_from_trace(rgb_trace)
-            freqs_bf = self.beatformer.czt.freq_axis.cpu().numpy()
-            snr_bf = self.czt.compute_snr_db(psd_bf, freqs_bf, hr_bf)
+            # FIXED: Convert BeatFormer frequency axis from Hz [0.7, 3.0] to BPM [42.0, 180.0]
+            freqs_bf_bpm = self.beatformer.czt.freq_axis.cpu().numpy() * 60.0
 
-            # Interpolate BeatFormer PSD to match 512-bin CZT grid
-            psd_bf_interp = np.interp(freqs_czt, freqs_bf, psd_bf)
+            # Also compute PFD-denoised POS chrominance spectrum for low-light/mask resilience
+            pos_bvp = pos_process(rgb_trace, fs=self.fs)
+            if self.enable_pfd:
+                pos_bvp, _, _ = self.pfd.denoise_spectrum(pos_bvp)
+            hr_pos, _, psd_pos = self.czt.estimate_hr(pos_bvp, return_spectrum=True)
+            snr_pos = self.czt.compute_snr_db(psd_pos, freqs_czt, hr_pos)
 
-            # In-band SNR-weighted spectral fusion
+            # Interpolate BeatFormer PSD to match 512-bin CZT BPM grid
+            psd_bf_interp = np.interp(freqs_czt, freqs_bf_bpm, psd_bf)
+            snr_bf = self.czt.compute_snr_db(psd_bf_interp, freqs_czt, hr_bf)
+
+            # In-band SNR-weighted spectral fusion across ME-rPPG+PFD, BeatFormer-SCL, and POS+PFD
             p_me_norm = psd_me / (np.sum(psd_me) + 1e-12)
             p_bf_norm = psd_bf_interp / (np.sum(psd_bf_interp) + 1e-12)
+            p_pos_norm = psd_pos / (np.sum(psd_pos) + 1e-12)
 
-            w_me = float(np.clip(10.0 ** (snr_me / 10.0), 0.1, 50.0))
-            w_bf = float(np.clip(10.0 ** (snr_bf / 10.0), 0.1, 50.0))
-            tot_w = w_me + w_bf
+            w_me = float(np.clip(10.0 ** (snr_me / 10.0), 0.05, 50.0))
+            w_bf = float(np.clip(10.0 ** (snr_bf / 10.0), 0.05, 50.0))
+            w_pos = float(np.clip(10.0 ** (snr_pos / 10.0), 0.05, 50.0))
+            tot_w = w_me + w_bf + w_pos
             weight_me = w_me / tot_w
-            weight_bf = w_bf / tot_w
+            weight_bf = (w_bf + w_pos) / tot_w
 
-            fused_psd = weight_me * p_me_norm + weight_bf * p_bf_norm
-            fused_bvp = weight_me * cleaned_bvp + weight_bf * bvp_bf[:t_len]
+            fused_psd = (w_me * p_me_norm + w_bf * p_bf_norm + w_pos * p_pos_norm) / tot_w
+            fused_bvp = (w_me * cleaned_bvp + w_bf * bvp_bf[:t_len] + w_pos * pos_bvp[:t_len]) / tot_w
 
             peak_idx = int(np.argmax(fused_psd))
-            if np.max(freqs_czt) > 15.0:
-                final_hr = float(freqs_czt[peak_idx])
-            else:
-                final_hr = float(freqs_czt[peak_idx] * 60.0)
+            # Parabolic sub-bin interpolation on fused spectrum
+            final_hr = float(freqs_czt[peak_idx])
+            if 0 < peak_idx < len(fused_psd) - 1:
+                a_p, b_p, g_p = fused_psd[peak_idx - 1], fused_psd[peak_idx], fused_psd[peak_idx + 1]
+                denom = a_p - 2.0 * b_p + g_p
+                if abs(denom) > 1e-12:
+                    delta = 0.5 * (a_p - g_p) / denom
+                    dbpm = float(freqs_czt[1] - freqs_czt[0])
+                    final_hr = float(freqs_czt[peak_idx] + delta * dbpm)
         else:
             final_hr = float(hr_me)
             fused_bvp = cleaned_bvp
