@@ -6,7 +6,7 @@ Converts facial ROI pixels from RGB to CIE 1976 L*a*b* space, computes ITA:
 and stratifies skin tone across Fitzpatrick Skin Types I-VI.
 """
 
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple, Union, Optional
 import numpy as np
 
 
@@ -66,11 +66,15 @@ def rgb_to_lab_approx(rgb: np.ndarray) -> np.ndarray:
     return np.stack([L, a, b], axis=-1)
 
 
-def compute_ita(roi_pixels: np.ndarray) -> Tuple[float, float, float]:
+def compute_ita(
+    roi_pixels: np.ndarray,
+    reference_white: Optional[np.ndarray] = None,
+) -> Tuple[float, float, float]:
     """Compute Individual Typology Angle (ITA) from RGB facial ROI pixels.
 
     Args:
         roi_pixels: RGB image or 2D array of skin pixels (H, W, 3) or (N, 3).
+        reference_white: Optional reference white RGB for illumination normalization.
 
     Returns:
         ita: Individual Typology Angle in degrees.
@@ -85,6 +89,23 @@ def compute_ita(roi_pixels: np.ndarray) -> Tuple[float, float, float]:
     valid_mask = (pixels.sum(axis=-1) > 10) & (pixels.sum(axis=-1) < 750)
     if np.any(valid_mask):
         pixels = pixels[valid_mask]
+
+    # Glare and extreme shadow trimming (10th to 85th luminance percentile)
+    if len(pixels) > 20:
+        if reference_white is not None:
+            ref = np.asarray(reference_white, dtype=np.float64)
+            if ref.ndim > 1:
+                ref = np.mean(ref.reshape(-1, 3), axis=0)
+            scale = np.mean(ref) / (ref + 1e-6)
+            pixels = np.clip(pixels.astype(np.float64) * scale, 0.0, 255.0).astype(np.uint8)
+
+        # Compute luminance (Rec. 601)
+        lum = 0.299 * pixels[:, 0] + 0.587 * pixels[:, 1] + 0.114 * pixels[:, 2]
+        p10 = np.percentile(lum, 10)
+        p85 = np.percentile(lum, 85)
+        in_range = (lum >= p10) & (lum <= p85)
+        if np.sum(in_range) > 5:
+            pixels = pixels[in_range]
 
     lab = rgb_to_lab_approx(pixels)
     mean_l = float(np.mean(lab[:, 0]))
@@ -106,9 +127,12 @@ def classify_fitzpatrick(ita_deg: float) -> str:
     return "Type VI" if ita_deg <= -30.0 else "Type I"
 
 
-def analyze_skin_tone(roi_pixels: np.ndarray) -> Dict[str, Union[float, str]]:
+def analyze_skin_tone(
+    roi_pixels: np.ndarray,
+    reference_white: Optional[np.ndarray] = None,
+) -> Dict[str, Union[float, str]]:
     """Complete skin tone analysis returning ITA and Fitzpatrick classification."""
-    ita, mean_l, mean_b = compute_ita(roi_pixels)
+    ita, mean_l, mean_b = compute_ita(roi_pixels, reference_white=reference_white)
     fitzpatrick = classify_fitzpatrick(ita)
     return {
         "ita_deg": round(ita, 2),

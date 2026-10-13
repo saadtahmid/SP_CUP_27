@@ -110,6 +110,48 @@ class CZTHRTransformer:
             return hr_bpm, bpm_bins, power
         return hr_bpm
 
+    def compute_snr_db(
+        self,
+        power: np.ndarray,
+        freq_axis: np.ndarray,
+        hr_bpm: float,
+        half_bandwidth_bpm: float = 6.0,
+    ) -> float:
+        """Compute physiological SNR in dB (de Haan & Jeanne 2013).
+
+        Args:
+            power: Power spectral density array.
+            freq_axis: Frequency axis (in BPM or Hz).
+            hr_bpm: Peak heart rate in BPM.
+            half_bandwidth_bpm: Integration half-bandwidth around peaks in BPM.
+
+        Returns:
+            snr_db: Signal-to-noise ratio in decibels.
+        """
+        axis = np.asarray(freq_axis)
+        if np.max(axis) < 15.0:  # In Hz
+            axis_bpm = axis * 60.0
+        else:
+            axis_bpm = axis
+
+        f0 = hr_bpm
+        f1 = 2.0 * hr_bpm
+
+        sig_mask = (np.abs(axis_bpm - f0) <= half_bandwidth_bpm)
+        if f1 <= self.high_hz * 60.0:
+            sig_mask = sig_mask | (np.abs(axis_bpm - f1) <= half_bandwidth_bpm)
+
+        sig_power = float(np.sum(power[sig_mask]))
+        noise_power = float(np.sum(power[~sig_mask]))
+
+        if noise_power <= 1e-12:
+            return 20.0
+        if sig_power <= 1e-12:
+            return -20.0
+
+        snr = 10.0 * np.log10(sig_power / noise_power)
+        return float(np.clip(snr, -20.0, 30.0))
+
 
 def estimate_hr_czt(sig: np.ndarray, fs: float = 30.0) -> float:
     """Convenience functional interface for CZT HR estimation."""

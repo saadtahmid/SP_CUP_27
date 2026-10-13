@@ -60,8 +60,13 @@ def chrom_process(
         ys = 1.5 * norm_rgb[:, 0] + norm_rgb[:, 1] - 1.5 * norm_rgb[:, 2]
 
         # Apply bandpass filter
-        xf = signal.filtfilt(b, a, xs)
-        yf = signal.filtfilt(b, a, ys)
+        padlen = min(len(xs) - 1, 3 * max(len(a), len(b)))
+        if padlen > 0 and len(xs) > 8:
+            xf = signal.filtfilt(b, a, xs, padlen=padlen)
+            yf = signal.filtfilt(b, a, ys, padlen=padlen)
+        else:
+            xf = xs - np.mean(xs)
+            yf = ys - np.mean(ys)
 
         std_xf = np.std(xf)
         std_yf = np.std(yf)

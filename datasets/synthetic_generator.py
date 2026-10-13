@@ -38,6 +38,8 @@ def generate_synthetic_rppg_video(
     lux: float = 300.0,
     has_mask: bool = False,
     motion_amplitude: float = 0.0,
+    rsa_amplitude: float = 0.0,
+    rsa_freq_hz: float = 0.10,
 ) -> Dict[str, any]:
     """Generate a synthetic video with an embedded rPPG physiological signal.
 
@@ -53,6 +55,8 @@ def generate_synthetic_rppg_video(
         lux: Ambient illuminance level (e.g. 300 lux baseline, <= 50 lux low light).
         has_mask: Whether to overlay synthetic mask covering lower face (C7).
         motion_amplitude: Amplitude of subtle facial translation motion.
+        rsa_amplitude: Amplitude of physiological Respiratory Sinus Arrhythmia in BPM.
+        rsa_freq_hz: RSA breathing modulation frequency in Hz.
 
     Returns:
         dict containing video metadata, ground truth HR, timestamps, and parameters.
@@ -64,9 +68,16 @@ def generate_synthetic_rppg_video(
     timestamps = np.arange(num_frames) / fps
     hr_freq_hz = target_hr_bpm / 60.0
 
-    # Cardiac pulsatile waveform: fundamental + subtle 2nd harmonic
-    pulse_clean = np.sin(2.0 * np.pi * hr_freq_hz * timestamps) + \
-                  0.3 * np.sin(4.0 * np.pi * hr_freq_hz * timestamps + 0.4)
+    if rsa_amplitude > 0.0:
+        amp_hz = rsa_amplitude / 60.0
+        # Phase integral phi(t) = 2*pi*integral(f(tau) dtau)
+        phase = 2.0 * np.pi * hr_freq_hz * timestamps - (amp_hz / rsa_freq_hz) * (np.cos(2.0 * np.pi * rsa_freq_hz * timestamps) - 1.0)
+        pulse_clean = np.sin(phase) + 0.3 * np.sin(2.0 * phase + 0.4)
+        target_hr_series = target_hr_bpm + rsa_amplitude * np.sin(2.0 * np.pi * rsa_freq_hz * timestamps)
+    else:
+        pulse_clean = np.sin(2.0 * np.pi * hr_freq_hz * timestamps) + \
+                      0.3 * np.sin(4.0 * np.pi * hr_freq_hz * timestamps + 0.4)
+        target_hr_series = np.full(num_frames, target_hr_bpm, dtype=np.float64)
 
     # Base skin tone color
     base_color = FITZPATRICK_BASE_RGB.get(fitzpatrick_type, FITZPATRICK_BASE_RGB["Type III"]).copy()
@@ -149,9 +160,8 @@ def generate_synthetic_rppg_video(
             noise = np.random.normal(0, noise_sigma, frame.shape)
             frame = np.clip(frame + noise, 0, 255)
 
-        frame_uint8 = np.clip(frame, 0, 255).astype(np.uint8)
-        out.write(frame_uint8)
-        gt_hr_series.append(target_hr_bpm)
+        gt_hr_series.append(float(target_hr_series[i]))
+        out.write(np.clip(frame, 0, 255).astype(np.uint8))
 
     out.release()
 
@@ -165,6 +175,7 @@ def generate_synthetic_rppg_video(
         "video_path": output_video_path,
         "gt_csv_path": output_gt_csv_path,
         "target_hr_bpm": target_hr_bpm,
+        "gt_hr_series": np.array(gt_hr_series),
         "duration_sec": duration_sec,
         "num_frames": num_frames,
         "fps": fps,

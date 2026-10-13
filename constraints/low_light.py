@@ -62,10 +62,16 @@ def apply_low_light_c1(
 def simulate_low_light_video(
     frames: np.ndarray,
     target_lux: float = 30.0,
+    baseline_lux: float = 300.0,
     noise_mode: str = "combined",
 ) -> np.ndarray:
     """Apply C1 low-light degradation to an entire video sequence of shape (T, H, W, 3)."""
     degraded = np.empty_like(frames, dtype=np.uint8)
     for i in range(len(frames)):
-        degraded[i] = apply_low_light_c1(frames[i], target_lux=target_lux, noise_mode=noise_mode)
+        degraded[i] = apply_low_light_c1(
+            frames[i],
+            target_lux=target_lux,
+            baseline_lux=baseline_lux,
+            noise_mode=noise_mode,
+        )
     return degraded

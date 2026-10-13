@@ -87,12 +87,96 @@ class MERPPGEngine:
 
         return bvp_val
 
+    def estimate_hr_windowed(
+        self,
+        bvp_series: np.ndarray,
+        win_sec: float = 10.0,
+        stride_sec: float = 1.0,
+    ) -> Tuple[float, np.ndarray]:
+        """Compute windowed HR series with harmonic and jump outlier rejection.
+
+        Synthesized from frPPG (Section III-B3) and BeatFormer.
+
+        Args:
+            bvp_series: 1D temporal BVP signal.
+            win_sec: Window length in seconds (default 10s).
+            stride_sec: Stride in seconds (default 1s).
+
+        Returns:
+            global_hr: Robust global median HR in BPM.
+            hr_series: Frame-level interpolated HR series (T,).
+        """
+        win_len = int(round(win_sec * self.fs))
+        stride_len = int(round(stride_sec * self.fs))
+        t_len = len(bvp_series)
+
+        if t_len < win_len:
+            single_hr = float(self.czt_estimator.estimate_hr(bvp_series))
+            return single_hr, np.full(t_len, single_hr, dtype=np.float64)
+
+        starts = list(range(0, t_len - win_len + 1, stride_len))
+        if not starts:
+            starts = [0]
+
+        window_hrs = []
+        window_snrs = []
+        window_centers = []
+
+        for s in starts:
+            segment = bvp_series[s : s + win_len]
+            hr, freqs, pxx = self.czt_estimator.estimate_hr(segment, return_spectrum=True)
+            snr_db = self.czt_estimator.compute_snr_db(pxx, freqs, hr)
+
+            window_hrs.append(hr)
+            window_snrs.append(snr_db)
+            window_centers.append(s + win_len // 2)
+
+        window_hrs = np.array(window_hrs, dtype=np.float64)
+        window_snrs = np.array(window_snrs, dtype=np.float64)
+
+        running_med = float(np.median(window_hrs))
+        valid_hrs = []
+        valid_centers = []
+
+        snr_thresh = np.percentile(window_snrs, 15) if len(window_snrs) >= 6 else -999.0
+
+        for idx, (hr_cand, snr_cand, center) in enumerate(zip(window_hrs, window_snrs, window_centers)):
+            if snr_cand < snr_thresh and len(window_hrs) >= 6:
+                continue
+
+            # Check jump from running median
+            if abs(hr_cand - running_med) > 15.0:
+                half_hr = hr_cand / 2.0
+                double_hr = hr_cand * 2.0
+                if abs(half_hr - running_med) < 8.0 and half_hr >= 42.0:
+                    hr_cand = half_hr
+                elif abs(double_hr - running_med) < 8.0 and double_hr <= 180.0:
+                    hr_cand = double_hr
+
+            valid_hrs.append(hr_cand)
+            valid_centers.append(center)
+
+        if not valid_hrs:
+            valid_hrs = window_hrs.tolist()
+            valid_centers = window_centers
+
+        global_hr = float(np.median(valid_hrs))
+
+        if len(valid_centers) > 1:
+            hr_series = np.interp(np.arange(t_len), valid_centers, valid_hrs)
+        else:
+            hr_series = np.full(t_len, global_hr, dtype=np.float64)
+
+        return global_hr, hr_series
+
     def process_frames(
         self,
         cropped_faces: np.ndarray,
         return_spectrum: bool = False,
     ) -> Dict[str, any]:
         """Process a sequence of cropped face frames (T, 36, 36, 3).
+
+        Applies 45-frame RMA state pre-warming, linear detrending, and sliding-window HR estimation.
 
         Args:
             cropped_faces: (T, 36, 36, 3) normalized float32 RGB faces.
@@ -101,7 +185,8 @@ class MERPPGEngine:
         Returns:
             dict containing:
             - bvp: 1D array of extracted BVP values
-            - hr_bpm: estimated HR via CZT
+            - hr_bpm: estimated robust global HR via CZT + windowing
+            - hr_series: frame-level estimated HR series
             - spectrum_freqs (optional)
             - spectrum_power (optional)
         """
@@ -109,20 +194,38 @@ class MERPPGEngine:
         t_len = len(cropped_faces)
         bvp_series = np.empty(t_len, dtype=np.float64)
 
+        # Pre-warm recurrent state on initial frames to discard RMA warm-up transient
+        warmup = min(45, t_len)
+        for i in range(warmup):
+            _ = self.step(cropped_faces[i])
+
+        # Execute full frame sequence
         for i in range(t_len):
             bvp_series[i] = self.step(cropped_faces[i])
 
-        # Estimate HR via CZT
-        if return_spectrum:
-            hr_bpm, freqs, power = self.czt_estimator.estimate_hr(bvp_series, return_spectrum=True)
+        # Smooth initial warmup transient to avoid CZT spectrum pollution
+        if warmup < t_len:
+            baseline_val = float(np.mean(bvp_series[warmup : min(warmup + 30, t_len)]))
+            bvp_series[:warmup] = baseline_val
+
+        # Sliding-window HR estimation with outlier rejection
+        if t_len >= int(10.0 * self.fs):
+            hr_bpm, hr_series = self.estimate_hr_windowed(bvp_series)
         else:
-            hr_bpm = self.czt_estimator.estimate_hr(bvp_series, return_spectrum=False)
+            hr_bpm = float(self.czt_estimator.estimate_hr(bvp_series))
+            hr_series = np.full(t_len, hr_bpm, dtype=np.float64)
+
+        # Full-window spectrum for diagnostic output
+        if return_spectrum:
+            _, freqs, power = self.czt_estimator.estimate_hr(bvp_series, return_spectrum=True)
+        else:
             freqs, power = None, None
 
         res = {
             "model": "ME-rPPG",
             "bvp": bvp_series,
             "hr_bpm": float(hr_bpm),
+            "hr_series": hr_series,
             "fs": self.fs,
         }
         if return_spectrum:

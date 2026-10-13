@@ -75,5 +75,9 @@ def pos_process(
     h_total[valid_mask] /= weight_total[valid_mask]
 
     # Bandpass filter cleanup to competition band 0.7-3.0 Hz
-    bvp = signal.filtfilt(b, a, h_total)
+    padlen = min(len(h_total) - 1, 3 * max(len(a), len(b)))
+    if padlen > 0 and len(h_total) > 8:
+        bvp = signal.filtfilt(b, a, h_total, padlen=padlen)
+    else:
+        bvp = h_total
     return bvp

@@ -84,14 +84,47 @@ power_spec = abs(czt_vals).^2;
 
 freq_bins = linspace(low_hz, high_hz, num_bins);
 bpm_bins = freq_bins * 60.0;
-
 [~, max_idx] = max(power_spec);
 estimated_hr = bpm_bins(max_idx);
 
-fprintf('Estimated Heart Rate: %.2f BPM\n', estimated_hr);
+% Parabolic peak interpolation
+if max_idx > 1 && max_idx < num_bins
+    alpha_p = power_spec(max_idx - 1);
+    beta_p = power_spec(max_idx);
+    gamma_p = power_spec(max_idx + 1);
+    denom = alpha_p - 2.0 * beta_p + gamma_p;
+    if abs(denom) > 1e-12
+        delta = 0.5 * (alpha_p - gamma_p) / denom;
+        dbpm = (high_hz - low_hz) / (num_bins - 1) * 60.0;
+        estimated_hr = bpm_bins(max_idx) + delta * dbpm;
+    end
+end
+
+fprintf('Estimated Global Heart Rate: %.2f BPM\n', estimated_hr);
+
+% Sliding-window HR series estimation (win=6s, stride=0.5s)
+win_len = min(N, round(6.0 * fps));
+stride = max(1, round(0.5 * fps));
+estimated_hr_series = repmat(estimated_hr, N, 1);
+if N >= win_len
+    win_starts = 1:stride:(N - win_len + 1);
+    win_hrs = zeros(length(win_starts), 1);
+    win_centers = zeros(length(win_starts), 1);
+    for wi = 1:length(win_starts)
+        ws = win_starts(wi);
+        sub_sig = bvp_signal(ws:(ws + win_len - 1));
+        c_vals = czt(sub_sig .* hanning(win_len), num_bins, W, A);
+        p_sub = abs(c_vals).^2;
+        [~, mi] = max(p_sub);
+        win_hrs(wi) = bpm_bins(mi);
+        win_centers(wi) = ws + floor(win_len / 2);
+    end
+    if length(win_centers) > 1
+        estimated_hr_series = interp1(win_centers, win_hrs, (1:N)', 'linear', 'extrap');
+    end
+end
 
 % Save output to processed_output.csv
-estimated_hr_series = repmat(estimated_hr, N, 1);
 T = table(timestamps, estimated_hr_series, bvp_signal, ...
     'VariableNames', {'timestamp_sec', 'estimated_hr_bpm', 'bvp_signal'});
 writetable(T, output_csv_filename);
