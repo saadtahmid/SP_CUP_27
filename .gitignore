@@ -30,3 +30,6 @@ artifacts/constraints/*.mp4
 .venv/
 env/
 venv/
+
+# Release and patch archives / directories
+FaceVitals_*

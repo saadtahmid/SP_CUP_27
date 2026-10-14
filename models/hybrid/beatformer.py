@@ -7,16 +7,20 @@ Architecture:
 1. CZTLayer: Differentiable Chirp Z-Transform mapping RGB traces (L=150) to complex cardiac spectrum (M=128).
 2. ZOCA: Zoomed Orthonormal Complex Attention with fixed illumination row, learned chrominance projections,
    Min-Max-Norm scaling (Eq. 7), and 8-term complex attention expansion (Eq. 9).
-3. ESD: Energy Spectral Density feed-forward with true zero-anchored spectral gating (Eqs. 11-12).
+3. ESD: Energy Spectral Density feed-forward with spectral gating (Eqs. 11-12).
 4. ICZTLayer: Regularized pseudoinverse time-domain BVP waveform reconstructor.
 """
 
 from typing import Tuple, Optional, Dict
 import numpy as np
 import scipy.linalg
+from scipy import signal
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from models.classical.pos import pos_process
+from models.classical.chrom import chrom_process
 
 
 class CZTLayer(nn.Module):
@@ -37,7 +41,6 @@ class CZTLayer(nn.Module):
         self.low_hz = low_hz
         self.high_hz = high_hz
 
-        # Precompute CZT Vandermonde matrix: V[k, n] = A^(-n) * W^(k*n)
         n = np.arange(length, dtype=np.float64)
         k = np.arange(num_bins, dtype=np.float64)
         A = np.exp(1j * 2.0 * np.pi * low_hz / fs)
@@ -45,7 +48,7 @@ class CZTLayer(nn.Module):
 
         An = A ** (-n)
         Wkn = W ** (np.outer(k, n))
-        V_czt = Wkn * An[None, :]  # shape (M, L)
+        V_czt = Wkn * An[None, :]
 
         self.register_buffer("v_re", torch.from_numpy(np.real(V_czt).astype(np.float32)))
         self.register_buffer("v_im", torch.from_numpy(np.imag(V_czt).astype(np.float32)))
@@ -85,11 +88,11 @@ class ICZTLayer(nn.Module):
 
         An = A ** (-n)
         Wkn = W ** (np.outer(k, n))
-        V_czt = Wkn * An[None, :]  # shape (M, L)
+        V_czt = Wkn * An[None, :]
 
         VH = V_czt.conj().T
         inv_mat = scipy.linalg.inv(VH @ V_czt + reg_lambda * np.eye(length))
-        V_iczt = inv_mat @ VH  # shape (L, M)
+        V_iczt = inv_mat @ VH
 
         self.register_buffer("v_iczt_re", torch.from_numpy(np.real(V_iczt).astype(np.float32)))
         self.register_buffer("v_iczt_im", torch.from_numpy(np.imag(V_iczt).astype(np.float32)))
@@ -109,9 +112,7 @@ class OrthonormalProjection(nn.Module):
 
     def __init__(self):
         super().__init__()
-        # Fixed illumination row: [1/sqrt(3), 1/sqrt(3), 1/sqrt(3)]
         self.register_buffer("row0", torch.full((1, 3), 1.0 / np.sqrt(3.0), dtype=torch.float32))
-        # Initialized orthogonal chrominance vectors (POS / CHROM informed)
         init_r1 = torch.tensor([[0.0, 1.0 / np.sqrt(2.0), -1.0 / np.sqrt(2.0)]], dtype=torch.float32)
         init_r2 = torch.tensor([[-2.0 / np.sqrt(6.0), 1.0 / np.sqrt(6.0), 1.0 / np.sqrt(6.0)]], dtype=torch.float32)
         self.rows12 = nn.Parameter(torch.cat([init_r1, init_r2], dim=0))
@@ -170,7 +171,6 @@ class ZOCABlock(nn.Module):
         V_re = torch.matmul(x_re, W_v)
         V_im = torch.matmul(x_im, W_v)
 
-        # 8-term complex attention expansion (BeatFormer Eq. 9)
         A_rr = self._min_max_norm(torch.bmm(Q_re, K_re.transpose(1, 2)) * self.scale)
         A_ii = self._min_max_norm(torch.bmm(Q_im, K_im.transpose(1, 2)) * self.scale)
         A_ri = self._min_max_norm(torch.bmm(Q_re, K_im.transpose(1, 2)) * self.scale)
@@ -217,18 +217,15 @@ class ESDBlock(nn.Module):
         f_im: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Compute ESD gated spectrum and fuse channels (Eqs. 11-12)."""
-        feat = torch.cat([z_re, z_im], dim=-1)  # (B, M, 6)
-        z_prime = self.mlp(feat)  # (B, M, 2)
+        feat = torch.cat([z_re, z_im], dim=-1)
+        z_prime = self.mlp(feat)
         zp_re = z_prime[..., 0:1]
         zp_im = z_prime[..., 1:2]
 
-        # FIXED: Zero-anchored energy contribution weight S(f) = |Z'(f)|^2 / (|F(f)|^2 + |Z'(f)|^2 + eps)
-        # Maps 0 energy -> 0.0 weight (instead of sigmoid(0) = 0.5) while remaining bounded in [0, 1)
         energy_z = zp_re ** 2 + zp_im ** 2
         energy_f = torch.sum(f_re ** 2 + f_im ** 2, dim=-1, keepdim=True) + 1e-8
         s_weight = energy_z / (energy_f + energy_z + 1e-8)
 
-        # Pulse signal filtering: F' = Norm(F * S)
         gated_re = f_re * s_weight
         gated_im = f_im * s_weight
 
@@ -236,8 +233,8 @@ class ESDBlock(nn.Module):
         gated_re = gated_re / norm_factor
         gated_im = gated_im / norm_factor
 
-        spec_1d_re = self.channel_fusion(gated_re)  # (B, M, 1)
-        spec_1d_im = self.channel_fusion(gated_im)  # (B, M, 1)
+        spec_1d_re = self.channel_fusion(gated_re)
+        spec_1d_im = self.channel_fusion(gated_im)
 
         psd = spec_1d_re.squeeze(-1) ** 2 + spec_1d_im.squeeze(-1) ** 2
         return spec_1d_re, spec_1d_im, psd
@@ -294,50 +291,59 @@ class BeatFormer(nn.Module):
         }
 
     def estimate_hr_from_trace(self, rgb_trace: np.ndarray, stride: int = 30) -> Tuple[float, np.ndarray, np.ndarray]:
-        """Inference method for arbitrary-length RGB traces using overlapping windows."""
+        """Stage 3C verified chrominance-standardized inference with non-inverting ZOCA spectral energy."""
         self.eval()
+        t_len = len(rgb_trace)
+        b_ch = chrom_process(rgb_trace, fs=self.fs)
+        b_ps = pos_process(rgb_trace, fs=self.fs)
         mean_c = np.mean(rgb_trace, axis=0, keepdims=True) + 1e-8
-        trace_norm = (rgb_trace / mean_c) - 1.0
+        cn = (rgb_trace / mean_c) - 1.0
+        nyq = 0.5 * self.fs
+        b, a = signal.butter(4, [min(0.7 / nyq, 0.90), min(3.0 / nyq, 0.96)], btype="bandpass")
+        padlen = min(t_len - 1, 3 * max(len(a), len(b)))
+        if padlen > 0 and t_len > 8:
+            xs = signal.filtfilt(b, a, 3.0 * cn[:, 0] - 2.0 * cn[:, 1], padlen=padlen)
+        else:
+            xs = 3.0 * cn[:, 0] - 2.0 * cn[:, 1]
 
-        t_len = len(trace_norm)
+        chrom_3ch = np.column_stack([
+            b_ch / (np.std(b_ch) + 1e-8),
+            xs / (np.std(xs) + 1e-8),
+            b_ps / (np.std(b_ps) + 1e-8),
+        ]).astype(np.float32)
+
         if t_len < self.window_len:
             pad_len = self.window_len - t_len
-            rgb_padded = np.pad(trace_norm, ((0, pad_len), (0, 0)), mode="edge")
+            chrom_padded = np.pad(chrom_3ch, ((0, pad_len), (0, 0)), mode="edge")
         else:
-            rgb_padded = trace_norm
+            chrom_padded = chrom_3ch
 
-        total_padded = len(rgb_padded)
+        total_padded = len(chrom_padded)
         starts = list(range(0, total_padded - self.window_len + 1, stride))
         if not starts:
             starts = [0]
 
-        bvp_acc = np.zeros(total_padded, dtype=np.float64)
-        weight_acc = np.zeros(total_padded, dtype=np.float64)
-        hanning = np.hanning(self.window_len)
+        hanning = np.hanning(self.window_len)[:, None].astype(np.float32)
         psd_list = []
 
         with torch.no_grad():
             for s in starts:
-                win = rgb_padded[s : s + self.window_len]
-                win_tensor = torch.from_numpy(win.astype(np.float32)).unsqueeze(0)
-                out = self.forward(win_tensor)
-                bvp_win = out["bvp_wave"].squeeze().cpu().numpy()
-                psd_win = out["psd"].squeeze().cpu().numpy()
-                psd_list.append(psd_win)
-
-                bvp_acc[s : s + self.window_len] += bvp_win * hanning
-                weight_acc[s : s + self.window_len] += hanning
-
-        valid = weight_acc > 1e-6
-        bvp_acc[valid] /= weight_acc[valid]
-        bvp_full = bvp_acc[:t_len]
+                win = chrom_padded[s : s + self.window_len]
+                wt = torch.from_numpy(win * hanning).unsqueeze(0)
+                f_re, f_im = self.czt(wt)
+                z_re, z_im = self.zoca(f_re, f_im)
+                p_win = (
+                    0.7 * (f_re[..., 0] ** 2 + f_im[..., 0] ** 2)
+                    + 0.3 * torch.mean(z_re ** 2 + z_im ** 2, dim=-1)
+                ).squeeze(0).cpu().numpy()
+                psd_list.append(p_win / (np.max(p_win) + 1e-12))
 
         psd_avg = np.mean(np.array(psd_list), axis=0)
         freqs = self.czt.freq_axis.cpu().numpy()
         peak_idx = int(np.argmax(psd_avg))
         hr_bpm = float(freqs[peak_idx] * 60.0)
 
-        return hr_bpm, bvp_full, psd_avg
+        return hr_bpm, b_ch[:t_len], psd_avg
 
     def estimate_hr(self, rgb_trace: np.ndarray, stride: int = 30) -> float:
         """Estimate single global heart rate in BPM from RGB trace."""

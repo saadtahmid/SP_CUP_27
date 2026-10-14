@@ -1,7 +1,7 @@
-"""Chrominance-based rPPG (CHROM).
+"""Chrominance-based (CHROM) rPPG Algorithm.
 
-De Haan, G., & Jeanne, V. (2013). Robust pulse rate from chrominance-based rPPG.
-IEEE TBME, 60(10), 2878-2886.
+De Haan, G., & Jeanne, V. (2013).
+Robust pulse rate from chrominance-based rPPG. IEEE TBME, 60(10), 2878-2886.
 """
 
 from typing import Optional
@@ -21,16 +21,15 @@ def chrom_process(
     if num_ch != 3:
         raise ValueError(f"Expected rgb_signals shape (T, 3), got {rgb.shape}")
 
-    win_len = max(45, int(round(window_sec * fs)))
-    stride = max(8, int(round(stride_sec * fs)))
+    win_len = max(16, int(window_sec * fs))
+    stride = max(4, int(stride_sec * fs))
 
     if t_len < win_len:
         win_len = t_len
         stride = max(1, t_len)
 
-    order = 2 if fs < 18.0 else 4
     nyq = 0.5 * fs
-    b, a = signal.butter(order, [min(0.7 / nyq, 0.90), min(3.0 / nyq, 0.96)], btype="bandpass")
+    b, a = signal.butter(4, [min(0.7 / nyq, 0.90), min(3.0 / nyq, 0.96)], btype="bandpass")
 
     h_total = np.zeros(t_len, dtype=np.float64)
     weight_total = np.zeros(t_len, dtype=np.float64)
@@ -67,24 +66,21 @@ def chrom_process(
 
         start += stride
 
-    if start < t_len and end < t_len:
-        s_rem = max(0, t_len - win_len)
-        sub_rgb = rgb[s_rem:t_len, :]
-        means = np.mean(sub_rgb, axis=0, keepdims=True)
-        norm_rgb = sub_rgb / np.where(means < 1e-6, 1e-6, means)
-        xs = 3.0 * norm_rgb[:, 0] - 2.0 * norm_rgb[:, 1]
-        ys = 1.5 * norm_rgb[:, 0] + norm_rgb[:, 1] - 1.5 * norm_rgb[:, 2]
-        padlen = min(len(xs) - 1, 3 * max(len(a), len(b)))
-        if padlen > 0 and len(xs) > 8:
-            xf = signal.filtfilt(b, a, xs, padlen=padlen)
-            yf = signal.filtfilt(b, a, ys, padlen=padlen)
-        else:
-            xf = xs - np.mean(xs)
-            yf = ys - np.mean(ys)
-        s = xf - (np.std(xf) / (np.std(yf) + 1e-12)) * yf
-        win_weights = np.hanning(len(sub_rgb))
-        h_total[s_rem:t_len] += s * win_weights
-        weight_total[s_rem:t_len] += win_weights
+    if start < t_len and np.max(weight_total[start:]) < 1e-6:
+        sub_rgb = rgb[start:, :]
+        rem_len = len(sub_rgb)
+        if rem_len > 8:
+            means = np.mean(sub_rgb, axis=0, keepdims=True)
+            norm_rgb = sub_rgb / np.where(means < 1e-6, 1e-6, means)
+            xs = 3.0 * norm_rgb[:, 0] - 2.0 * norm_rgb[:, 1]
+            ys = 1.5 * norm_rgb[:, 0] + norm_rgb[:, 1] - 1.5 * norm_rgb[:, 2]
+            b_rem, a_rem = signal.butter(2, [min(0.7 / nyq, 0.90), min(3.0 / nyq, 0.96)], btype="bandpass")
+            pad_rem = min(len(xs) - 1, 3 * max(len(a_rem), len(b_rem)))
+            xf = signal.filtfilt(b_rem, a_rem, xs, padlen=pad_rem)
+            yf = signal.filtfilt(b_rem, a_rem, ys, padlen=pad_rem)
+            s = xf - (np.std(xf) / (np.std(yf) + 1e-12)) * yf
+            h_total[start:] += s
+            weight_total[start:] += 1.0
 
     valid_mask = weight_total > 1e-6
     h_total[valid_mask] /= weight_total[valid_mask]
@@ -95,4 +91,3 @@ def chrom_process(
     else:
         bvp = h_total
     return bvp
-

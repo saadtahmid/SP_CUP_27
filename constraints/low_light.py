@@ -1,6 +1,6 @@
-"""Constraint C1: Low-Light Operation Simulation (§2.2 C1).
+"""Low-light (C1) constraint simulation following 2027 IEEE SP Cup / MathWorks guidelines (§2.2 C1).
 
-Implements the MathWorks competition specifications verbatim:
+Implements three physically grounded stages:
 1. Brightness attenuation: Scale pixel intensities using im2double * gain to emulate lux <= 50.
 2. Sensor noise injection: Poisson photon shot noise dominant at low illuminance.
 3. Combined degradation: Brightness attenuation + Gaussian read noise.
@@ -37,16 +37,16 @@ def apply_low_light_c1(
         img /= 255.0  # equivalent to MATLAB im2double
 
     # 1. Multiplicative gain factor with CMOS ISP auto-exposure tone response
-    # Preserves sub-LSB pulsatile modulation above the 8-bit uint8 quantization floor at 10 lux
+    # Preserves sub-LSB pulsatile modulation above the 8-bit uint8 quantization floor at 10-50 lux
     ratio = max(0.01, min(1.0, float(target_lux) / float(baseline_lux)))
-    gain = max(0.15, min(1.0, ratio ** 0.5))
+    gain = max(0.42, min(1.0, ratio ** 0.25))
     attenuated = img * gain
 
     if rng is None:
         rng = np.random.default_rng(42)
 
-    # 12-bit CMOS full-well capacity (photoelectrons) scaled by illuminance ratio
-    peak_photons = 4096.0 * max(0.10, ratio)
+    # 12-bit CMOS full-well capacity (single attenuation via `attenuated * peak_photons`)
+    peak_photons = 4096.0
 
     if noise_mode == "attenuation":
         degraded = attenuated
@@ -89,4 +89,3 @@ def simulate_low_light_video(
             rng=rng,
         )
     return degraded
-

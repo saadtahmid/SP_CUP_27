@@ -135,4 +135,3 @@ def simulate_bitrate_compression_frames(
                 res[n_read:] = comp_frames[-1]
             return res
         return frames
-

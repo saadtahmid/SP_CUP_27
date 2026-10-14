@@ -1,3 +1,3 @@
 test,fps,est_hr,err_bpm
-Frame Decimation (10 fps),9.87,70.78,41.61
-Bitrate Compression (400 kbps),29.61,112.33,0.06
+Frame Decimation (10 fps),9.87,112.29,0.09
+Bitrate Compression (400 kbps),29.61,112.55,0.16
