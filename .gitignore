@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Caches & Test artifacts
+.pytest_cache/
+.ruff_cache/
+*.log
+
+# Third party repositories with large model weights
+third_party/
+
+# Scratch & temporary extracted text
+extracted_pdf_text.txt
+pdf_text.txt
+official_doc.txt
+
+# Dataset video files (downloadable via scripts/download_all_ubfc_hf.py)
+datasets/ubfc_raw/
+datasets/ubfc_faces/
+datasets/ubfc/*/vid.mp4
+datasets/ubfc/*/vid.avi
+
+# Artifact temporary simulation videos (keep CSV tables and PNG plots)
+artifacts/*.mp4
+artifacts/constraints/*.mp4
+
+# Python environment
+.venv/
+env/
+venv/

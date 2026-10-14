@@ -1,0 +1,10 @@
+# Component Ablation Matrix (2027 IEEE SP Cup — FaceVitals)
+
+| Configuration | Spectral Estimator | BBox & Skin Filter | Denoiser / Attention | UBFC Baseline Error (BPM) | C1 (10 lux) Error (BPM) | C7 (Masked) Error (BPM) |
+| :--- | :--- | :--- | :--- | :---: | :---: | :---: |
+| **Baseline v0 (POS + Welch FFT)** | Welch FFT | Raw Per-Frame | None (POS) | 39.52 | 48.20 | 41.26 |
+| **+ CZT Zooming (BeatFormer CZT)** | 512-bin CZT | Raw Per-Frame | None (POS) | 39.32 | 49.65 | 39.30 |
+| **+ ROI Stabilization & Skin/SNR Filter (frPPG + FSAM)** | 512-bin CZT | EMA BBox + YCbCr + NMF/SNR ROI | None (POS) | 39.35 | 37.39 | 39.61 |
+| **Pipeline v2 (ME-rPPG State-Space)** | 512-bin CZT | EMA BBox + 45-Frame RMA Warmup | ME-rPPG State-Space | 1.64 | 11.65 | 27.98 |
+| **+ FreqPhys PFD (PBF + PSM + ASS)** | 512-bin CZT | EMA BBox + 45-Frame RMA Warmup | ME-rPPG + PFD | 0.23 | 14.74 | 40.12 |
+| **Pipeline v3 (Full Dual-Branch Hybrid)** | 512-bin CZT | EMA BBox + NMF/SNR ROI | ME-rPPG + PFD + BeatFormer-SCL | 0.30 | 14.71 | 39.89 |

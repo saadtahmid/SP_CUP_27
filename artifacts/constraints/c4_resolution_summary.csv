@@ -1,0 +1,4 @@
+resolution,est_pos_bpm,err_pos_bpm,est_hybrid_bpm,err_hybrid_bpm
+HD,73.06,39.32,111.89,0.5
+VGA,73.04,39.35,112.01,0.37
+QVGA,73.19,39.2,111.97,0.42
