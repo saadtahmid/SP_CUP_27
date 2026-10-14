@@ -7,7 +7,9 @@ Each subject has 3 ROI video recordings:
 - rightcheek: video{N}_rightcheek.avi
 Ground truth mean heart rates stored in India_GT.csv and Sierra_Leone_GT.csv.
 
-Applies YCbCr + glare skin-pixel filtering per frame and dynamic SNR sub-ROI fusion.
+Uses a Frame-0 static intensity/glare mask per ROI stream to prevent per-frame
+YCbCr threshold-switching discontinuities on dark skin tones (Fitzpatrick Types V-VI),
+and fuses sub-ROIs via dynamic spectral SNR weighting.
 """
 
 import os
@@ -21,7 +23,7 @@ from preprocessing.roi_extractor import filter_skin_pixels, fuse_sub_rois_by_snr
 
 
 def _read_video_mean_rgb(video_path: str, max_frames: Optional[int] = 450) -> Tuple[np.ndarray, float, Optional[np.ndarray]]:
-    """Stream video and compute skin-filtered spatial mean RGB per frame."""
+    """Stream pre-cropped ROI video and compute spatial mean RGB using a Frame-0 static mask."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         return np.zeros((0, 3)), 15.0, None
@@ -33,6 +35,7 @@ def _read_video_mean_rgb(video_path: str, max_frames: Optional[int] = 450) -> Tu
 
     means = []
     mid_frame_rgb = None
+    static_mask = None
     idx = 0
 
     while True:
@@ -41,11 +44,17 @@ def _read_video_mean_rgb(video_path: str, max_frames: Optional[int] = 450) -> Tu
             break
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         pix = frame_rgb.reshape(-1, 3)
-        filt_pix = filter_skin_pixels(pix)
-        if len(filt_pix) > 0:
-            mean_rgb = np.mean(filt_pix, axis=0)
-        else:
-            mean_rgb = np.mean(pix, axis=0)
+
+        # Lock non-glare / non-shadow mask on Frame 0 so sampled pixel set never switches mid-video
+        if static_mask is None or len(static_mask) != len(pix):
+            cand_mask = (
+                (pix[:, 0] > 3) & (pix[:, 0] < 245) &
+                (pix[:, 1] > 3) & (pix[:, 1] < 245) &
+                (pix[:, 2] > 3) & (pix[:, 2] < 245)
+            )
+            static_mask = cand_mask if np.sum(cand_mask) > 0.25 * len(pix) else np.ones(len(pix), dtype=bool)
+
+        mean_rgb = np.mean(pix[static_mask], axis=0)
         means.append(mean_rgb)
 
         if idx == mid_idx:
@@ -133,3 +142,4 @@ class AiPEXDatasetLoader:
             "num_frames": len(combined_mean),
             "skin_tone": skin_info,
         }
+

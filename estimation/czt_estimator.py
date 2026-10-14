@@ -34,15 +34,7 @@ class CZTHRTransformer:
         self.bpm_bins = self.freq_bins * 60.0
 
     def compute_spectrum(self, sig: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Compute the zoomed power spectrum of a 1D physiological signal.
-
-        Args:
-            sig: 1D numpy array of temporal rPPG / BVP values.
-
-        Returns:
-            bpm_bins: 1D array of BPM frequencies in [42, 180].
-            power: 1D array of normalized power spectral density values.
-        """
+        """Compute the zoomed power spectrum of a 1D physiological signal."""
         x = np.asarray(sig, dtype=np.float64)
         n = len(x)
         if n < 4:
@@ -54,8 +46,6 @@ class CZTHRTransformer:
         x_windowed = x_detrended * window
 
         # Configure CZT on the unit circle
-        # A = exp(j * 2*pi * f_low / fs)
-        # W = exp(-j * 2*pi * (f_high - f_low) / ((M - 1) * fs))
         w_step = (self.high_hz - self.low_hz) / (self.num_bins - 1)
         a = np.exp(1j * 2.0 * np.pi * self.low_hz / self.fs)
         w = np.exp(-1j * 2.0 * np.pi * w_step / self.fs)
@@ -69,6 +59,22 @@ class CZTHRTransformer:
         if max_p > 1e-12:
             power /= max_p
 
+        # Suppress sub-60 BPM respiratory sway when a genuine cardiac fundamental exists in [60, 145] BPM
+        core_mask = (self.bpm_bins >= 60.0) & (self.bpm_bins <= 145.0)
+        low_mask = self.bpm_bins < 60.0
+        if np.any(core_mask) and np.any(low_mask):
+            core_max = float(np.max(power[core_mask]))
+            low_max = float(np.max(power[low_mask]))
+            if low_max > 0.80 and core_max >= 0.15:
+                low_idx = int(np.argmax(power[low_mask]))
+                low_bpm = float(self.bpm_bins[low_mask][low_idx])
+                harm_mask = np.abs(self.bpm_bins - 2.0 * low_bpm) <= 6.0
+                if np.any(harm_mask) and np.max(power[harm_mask]) >= 0.12:
+                    power[harm_mask] *= 1.35
+                power[low_mask] *= 0.10
+                if np.max(power) > 1e-12:
+                    power /= np.max(power)
+
         return self.bpm_bins, power
 
     def estimate_hr(
@@ -76,16 +82,7 @@ class CZTHRTransformer:
         sig: np.ndarray,
         return_spectrum: bool = False,
     ) -> Union[float, Tuple[float, np.ndarray, np.ndarray]]:
-        """Estimate Heart Rate in Beats Per Minute (BPM) from a 1D rPPG signal.
-
-        Args:
-            sig: 1D numpy array of temporal rPPG signal.
-            return_spectrum: Whether to also return the (bpm_bins, power) arrays.
-
-        Returns:
-            hr_bpm: Dominant HR frequency in BPM.
-            (optional) bpm_bins, power spectrum arrays.
-        """
+        """Estimate Heart Rate in Beats Per Minute (BPM) from a 1D rPPG signal."""
         bpm_bins, power = self.compute_spectrum(sig)
 
         # Identify dominant physiological peak
@@ -117,17 +114,7 @@ class CZTHRTransformer:
         hr_bpm: float,
         half_bandwidth_bpm: float = 6.0,
     ) -> float:
-        """Compute physiological SNR in dB (de Haan & Jeanne 2013).
-
-        Args:
-            power: Power spectral density array.
-            freq_axis: Frequency axis (in BPM or Hz).
-            hr_bpm: Peak heart rate in BPM.
-            half_bandwidth_bpm: Integration half-bandwidth around peaks in BPM.
-
-        Returns:
-            snr_db: Signal-to-noise ratio in decibels.
-        """
+        """Compute physiological SNR in dB (de Haan & Jeanne 2013)."""
         axis = np.asarray(freq_axis)
         if np.max(axis) < 15.0:  # In Hz
             axis_bpm = axis * 60.0
@@ -137,9 +124,16 @@ class CZTHRTransformer:
         f0 = hr_bpm
         f1 = 2.0 * hr_bpm
 
-        sig_mask = (np.abs(axis_bpm - f0) <= half_bandwidth_bpm)
+        f0_mask = np.abs(axis_bpm - f0) <= half_bandwidth_bpm
+        sig_mask = f0_mask.copy()
+
+        # Only include 2nd harmonic f1 if f0 is the true fundamental (not a sub-harmonic < f1)
         if f1 <= self.high_hz * 60.0:
-            sig_mask = sig_mask | (np.abs(axis_bpm - f1) <= half_bandwidth_bpm)
+            f1_mask = np.abs(axis_bpm - f1) <= half_bandwidth_bpm
+            p_f0 = float(np.max(power[f0_mask])) if np.any(f0_mask) else 0.0
+            p_f1 = float(np.max(power[f1_mask])) if np.any(f1_mask) else 0.0
+            if p_f1 <= 0.65 * p_f0:
+                sig_mask = sig_mask | f1_mask
 
         sig_power = float(np.sum(power[sig_mask]))
         noise_power = float(np.sum(power[~sig_mask]))
@@ -157,3 +151,4 @@ def estimate_hr_czt(sig: np.ndarray, fs: float = 30.0) -> float:
     """Convenience functional interface for CZT HR estimation."""
     estimator = CZTHRTransformer(fs=fs)
     return estimator.estimate_hr(sig)
+

@@ -26,10 +26,6 @@ datasets/ubfc/*/vid.avi
 artifacts/*.mp4
 artifacts/constraints/*.mp4
 
-# Large submission binary mat files (reproducible via scripts/package_submission.py)
-submission/**/*.mat
-*.mat
-
 # Python environment
 .venv/
 env/

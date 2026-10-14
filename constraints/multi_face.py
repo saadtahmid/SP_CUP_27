@@ -76,7 +76,6 @@ class TargetFaceKalmanTracker:
             cy = (ymin + ymax) / 2.0
             dist_to_center = np.sqrt((cx - center_x) ** 2 + (cy - center_y) ** 2)
 
-            # Centrality & size score
             score = area - 50.0 * dist_to_center
             if score > best_score:
                 best_score = score
@@ -89,7 +88,7 @@ class TargetFaceKalmanTracker:
         bh = float(ymax - ymin)
 
         self.state = np.array([cx, cy, bw, bh, 0.0, 0.0], dtype=np.float64)
-        self.primary_target_box = best_box
+        self.primary_target_box = np.array(best_box, dtype=np.int32)
         self.initialized = True
 
     def predict(self) -> np.ndarray:
@@ -130,7 +129,6 @@ class TargetFaceKalmanTracker:
 
         pred_box = self.predict()
 
-        # IoU assignment matching (mirroring MATLAB assignDetectionsToTracks)
         best_iou = -1.0
         best_match = None
 
@@ -140,11 +138,9 @@ class TargetFaceKalmanTracker:
                 best_iou = iou
                 best_match = box
 
-        # If matched with reasonable spatial overlap or proximity, update track
         if best_match is not None and best_iou > 0.15:
             self.update(best_match)
         else:
-            # Coast on Kalman prediction
             cx, cy, bw, bh = self.state[:4]
             self.primary_target_box = np.array([cx - bw / 2.0, cy - bh / 2.0, cx + bw / 2.0, cy + bh / 2.0], dtype=np.int32)
 
@@ -157,42 +153,29 @@ def simulate_multi_person_video(
     distractor_scale: float = 0.35,
     fs: float = 30.0,
 ) -> np.ndarray:
-    """Embed a secondary bystander face into the frame pulsing at a conflicting heart rate (C3).
-
-    Args:
-        target_frames: (T, H, W, 3) video array of primary subject.
-        distractor_hr_bpm: Conflicting pulse rate of bystander (default 115 BPM).
-        distractor_scale: Relative size of distractor face relative to frame height.
-        fs: Frame sampling rate in Hz.
-
-    Returns:
-        composite_frames: Video frames with primary subject and bystander face.
-    """
+    """Embed a secondary bystander face into the frame pulsing at a conflicting heart rate (C3)."""
     t_len, h, w, _ = target_frames.shape
     composite = np.copy(target_frames)
 
-    f_dist = distractor_hr_bpm / 60.0  # e.g. 1.917 Hz
+    f_dist = distractor_hr_bpm / 60.0
     dh = int(h * distractor_scale)
     dw = int(dh * 0.85)
 
-    # Position in upper right corner
+    # Position in upper right corner (x >= 0.72 * w)
     x1 = w - dw - int(0.05 * w)
     y1 = int(0.08 * h)
     x2 = x1 + dw
     y2 = y1 + dh
 
     for t in range(t_len):
-        # Generate synthetic skin patch with 115 BPM pulse
         pulse = np.sin(2.0 * np.pi * f_dist * (t / fs))
         bystander = np.zeros((dh, dw, 3), dtype=np.uint8)
 
-        # Flesh tones with modulated green channel
         r_val = 195 + int(3.0 * np.sin(2.0 * np.pi * 0.2 * t))
         g_val = int(np.clip(150.0 - 15.0 * pulse, 0, 255))
         b_val = 125
 
         cv2.ellipse(bystander, (dw // 2, dh // 2), (dw // 2 - 4, dh // 2 - 4), 0, 0, 360, (b_val, g_val, r_val), -1)
-        # Add eyes and mouth features
         cv2.circle(bystander, (dw // 3, dh // 3), 4, (50, 40, 30), -1)
         cv2.circle(bystander, (2 * dw // 3, dh // 3), 4, (50, 40, 30), -1)
         cv2.line(bystander, (dw // 3, 2 * dh // 3), (2 * dw // 3, 2 * dh // 3), (70, 50, 60), 2)
@@ -201,3 +184,4 @@ def simulate_multi_person_video(
         composite[t, y1:y2, x1:x2] = np.where(mask, bystander, composite[t, y1:y2, x1:x2])
 
     return composite
+

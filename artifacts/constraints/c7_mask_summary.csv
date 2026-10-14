@@ -1,2 +1,2 @@
 constraint,sub_roi_weights,pos_hr,pos_err,hybrid_hr,hybrid_err
-C7 Masked Face,"{'forehead': 0.09336520598417718, 'left_cheek': 0.11769862054571191, 'right_cheek': 0.7889361734701109}",51.6,60.79,113.67,1.28
+C7 Masked Face,"{'forehead': 1.0, 'left_cheek': 0.0, 'right_cheek': 0.0}",72.72,39.67,72.31,40.08

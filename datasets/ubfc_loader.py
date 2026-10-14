@@ -4,11 +4,9 @@ Bobbia, S., Macwan, R., Benezeth, Y., Mansouri, A., Dubois, J. (2017).
 Unsupervised skin tissue segmentation for remote photoplethysmography.
 Pattern Recognition Letters.
 
-Folder layout:
-datasets/ubfc/
-└── subject{N}/
-    ├── vid.avi (or vid.mp4)
-    └── ground_truth.txt
+Provides both:
+- `gt_mean_hr`: Line 2 CMS50E finger-oximeter display HR average
+- `gt_ppg_hr`: Line 1 synchronized contact PPG waveform dominant CZT HR (standard SOTA benchmark protocol)
 """
 
 import os
@@ -20,6 +18,7 @@ import numpy as np
 
 from preprocessing.roi_extractor import ROIExtractor
 from preprocessing.skin_tone import analyze_skin_tone
+from estimation.czt_estimator import CZTHRTransformer
 
 
 class UBFCDataLoader:
@@ -53,7 +52,7 @@ class UBFCDataLoader:
 
     @staticmethod
     def load_ground_truth(gt_path: str) -> Dict[str, np.ndarray]:
-        """Parse UBFC ground_truth.txt (3 lines: PPG, HR, Time)."""
+        """Parse UBFC ground_truth.txt (3 lines: PPG waveform, Oximeter HR, Time)."""
         with open(gt_path, "r") as f:
             lines = [l.strip() for l in f.readlines() if l.strip()]
 
@@ -64,23 +63,25 @@ class UBFCDataLoader:
         hr = np.fromstring(lines[1], sep=" ", dtype=np.float64)
         timestamps = np.fromstring(lines[2], sep=" ", dtype=np.float64)
 
-        # Filter out oximeter sensor dropouts (HR <= 40.0 bpm)
         valid_hr = hr[hr > 40.0]
         mean_hr_bpm = float(np.mean(valid_hr)) if len(valid_hr) > 0 else float(np.mean(hr))
+
+        czt = CZTHRTransformer(fs=30.0, low_hz=0.7, high_hz=3.0, num_bins=512)
+        ppg_hr_bpm = float(czt.estimate_hr(ppg)) if len(ppg) >= 8 else mean_hr_bpm
 
         return {
             "ppg": ppg,
             "hr": hr,
             "timestamps": timestamps,
             "mean_hr_bpm": mean_hr_bpm,
+            "ppg_hr_bpm": ppg_hr_bpm,
         }
 
     def process_subject(self, subject_info: Dict[str, str], max_frames: Optional[int] = None) -> Dict[str, any]:
-        """Extract RGB traces and ground-truth HR from a UBFC subject."""
+        """Extract RGB traces and both Line-1 PPG and Line-2 Oximeter ground-truth HR from a UBFC subject."""
         gt_data = self.load_ground_truth(subject_info["gt_path"])
         vid_path = subject_info["video_path"]
 
-        # Ensure playable video format if raw AVI
         if vid_path.endswith(".avi") and not os.path.exists(vid_path.replace(".avi", ".mp4")):
             mp4_path = vid_path.replace(".avi", ".mp4")
             try:
@@ -95,9 +96,8 @@ class UBFCDataLoader:
         if not os.path.exists(vid_path):
             raise FileNotFoundError(f"Video not found for {subject_info['subject_id']}")
 
-        # Read frames up to max_frames (by default all frames of vid.mp4 ~1800 frames)
         cap = cv2.VideoCapture(vid_path)
-        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
         frames = []
         count = 0
         while True:
@@ -110,14 +110,18 @@ class UBFCDataLoader:
 
         frames_arr = np.array(frames)
         extractor = ROIExtractor()
-        extracted = extractor.process_video(frames_arr)
+        extracted = extractor.process_video(frames_arr, fs=fps)
 
         skin_info = analyze_skin_tone(extracted["skin_sample"])
 
-        # Align ground truth HR to extracted duration and filter sensor dropouts
-        aligned_gt_hr = gt_data["hr"][:len(frames_arr)] if len(gt_data["hr"]) >= len(frames_arr) else gt_data["hr"]
+        n_ext = len(frames_arr)
+        aligned_gt_hr = gt_data["hr"][:n_ext] if len(gt_data["hr"]) >= n_ext else gt_data["hr"]
         valid_aligned = aligned_gt_hr[aligned_gt_hr > 40.0]
         mean_gt_hr = float(np.mean(valid_aligned)) if len(valid_aligned) > 0 else float(np.mean(aligned_gt_hr))
+
+        aligned_ppg = gt_data["ppg"][:n_ext] if len(gt_data["ppg"]) >= n_ext else gt_data["ppg"]
+        czt_ppg = CZTHRTransformer(fs=fps, low_hz=0.7, high_hz=3.0, num_bins=512)
+        ppg_gt_hr = float(czt_ppg.estimate_hr(aligned_ppg)) if len(aligned_ppg) >= 8 else mean_gt_hr
 
         return {
             "subject_id": subject_info["subject_id"],
@@ -128,6 +132,8 @@ class UBFCDataLoader:
             "fps": fps,
             "skin_tone": skin_info,
             "gt_hr_series": aligned_gt_hr,
-            "gt_timestamps": gt_data["timestamps"][:len(frames_arr)],
+            "gt_timestamps": gt_data["timestamps"][:n_ext],
             "gt_mean_hr": mean_gt_hr,
+            "gt_ppg_hr": ppg_gt_hr,
         }
+
