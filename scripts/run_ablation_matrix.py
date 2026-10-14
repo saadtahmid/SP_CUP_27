@@ -1,6 +1,6 @@
 """Phase 4 Component Ablation Matrix Runner (scripts/run_ablation_matrix.py).
 
-Isolates each paper-driven upgrade across UBFC, AiPEX (C2), C1 (10 lux), and C7 (Masked Face)
+Isolates each paper-driven upgrade across UBFC, C1 (10 lux), and C7 (Masked Face)
 and exports:
   - artifacts/ablation_matrix.csv
   - artifacts/ablation_matrix.md
@@ -30,10 +30,10 @@ def main():
     print("RUNNING PHASE 4 COMPONENT ABLATION MATRIX")
     print("=" * 75)
 
-    # Load baseline real video (subject4)
+    # Load baseline real video (subject4, 600 frames)
     frames, fps, gt_hr = load_real_baseline_frames(subject_id="subject4", max_frames=600)
-    np.random.seed(42)
-    frames_c1 = simulate_low_light_video(frames, target_lux=10.0, baseline_lux=300.0)
+    # Uses the exact same deterministic seed=42 inside simulate_low_light_video as run_constraints.py
+    frames_c1 = simulate_low_light_video(frames, target_lux=10.0, baseline_lux=300.0, seed=42)
 
     extractor = ROIExtractor()
     masked_frames = simulate_masked_video(frames, tracker=extractor.tracker)
@@ -136,3 +136,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

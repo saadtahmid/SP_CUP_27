@@ -1,14 +1,9 @@
 """Run and benchmark rPPG pipelines on UBFC-rPPG dataset across all 42 subjects (Phase 4).
 
-Supports:
-1. Multi-method video evaluation across all UBFC video subjects:
-   - POS + FFT
-   - POS + CZT
-   - CHROM + CZT
-   - ME-rPPG (stabilized + windowed)
-   - Hybrid v3 (ME-rPPG + PFD + BeatFormer-SCL + CZT)
-   Exports artifacts/ubfc/ubfc_ablation_summary.csv and per-method CSV/PNGs.
-2. Complete 42-subject clinical evaluation against CMS50E ground truth oximeter traces.
+Reports both:
+1. Standard SOTA Contact-PPG Waveform Protocol (Line 1 of ground_truth.txt, matching rPPG-Toolbox / ME-rPPG / FreqPhys)
+2. CMS50E Finger-Oximeter Display Protocol (Line 2 of ground_truth.txt)
+Exports artifacts/ubfc/ubfc_ablation_summary.csv and per-method CSV/PNGs.
 """
 
 import os
@@ -81,11 +76,6 @@ def evaluate_all_video_methods(loader: UBFCDataLoader, max_frames: int = None):
         return None
 
     print(f"\nFound {len(subjects)} UBFC subjects with video for multi-method benchmark.")
-    pipe_pos_fft = ClassicalRPPGPipeline(method="POS", fs=30.0, use_czt=False)
-    pipe_pos_czt = ClassicalRPPGPipeline(method="POS", fs=30.0, use_czt=True)
-    pipe_chrom_czt = ClassicalRPPGPipeline(method="CHROM", fs=30.0, use_czt=True)
-    me_engine = MERPPGEngine(fs=30.0)
-    hybrid_sys = HybridRPPGSystem(fs=30.0, enable_pfd=True, enable_czt=True, enable_beatformer=True)
 
     method_preds = {
         "POS+FFT": [],
@@ -94,7 +84,8 @@ def evaluate_all_video_methods(loader: UBFCDataLoader, max_frames: int = None):
         "ME-rPPG": [],
         "Hybrid_v3": [],
     }
-    refs = []
+    refs_oximeter = []
+    refs_ppg = []
     subj_ids = []
     skin_types = []
 
@@ -103,18 +94,26 @@ def evaluate_all_video_methods(loader: UBFCDataLoader, max_frames: int = None):
         print(f"  Extracting & evaluating {subj_id}...")
         data = loader.process_subject(s_info, max_frames=max_frames)
         gt_hr = data["gt_mean_hr"]
+        gt_ppg = data.get("gt_ppg_hr", gt_hr)
         rgb = data["rgb_signals"]
         c_faces = data["cropped_faces"]
+        subj_fps = float(data.get("fps", 30.0))
         st_type = data["skin_tone"]["fitzpatrick_type"]
+
+        pipe_pos_fft = ClassicalRPPGPipeline(method="POS", fs=subj_fps, use_czt=False)
+        pipe_pos_czt = ClassicalRPPGPipeline(method="POS", fs=subj_fps, use_czt=True)
+        pipe_chrom_czt = ClassicalRPPGPipeline(method="CHROM", fs=subj_fps, use_czt=True)
+        me_engine = MERPPGEngine(fs=subj_fps)
+        hybrid_sys = HybridRPPGSystem(fs=subj_fps, enable_pfd=True, enable_czt=True, enable_beatformer=True)
 
         hr_pos_fft = pipe_pos_fft.process(rgb)["hr_bpm"]
         hr_pos_czt = pipe_pos_czt.process(rgb)["hr_bpm"]
         hr_chrom_czt = pipe_chrom_czt.process(rgb)["hr_bpm"]
         hr_me = me_engine.process_frames(c_faces)["hr_bpm"]
-        # FIXED: Pass rgb_signals=rgb so BeatFormer uses filtered skin sub-ROIs
         hr_hyb = hybrid_sys.process(c_faces, rgb_signals=rgb)["hr_bpm"]
 
-        refs.append(gt_hr)
+        refs_oximeter.append(gt_hr)
+        refs_ppg.append(gt_ppg)
         subj_ids.append(subj_id)
         skin_types.append(st_type)
         method_preds["POS+FFT"].append(hr_pos_fft)
@@ -123,16 +122,21 @@ def evaluate_all_video_methods(loader: UBFCDataLoader, max_frames: int = None):
         method_preds["ME-rPPG"].append(hr_me)
         method_preds["Hybrid_v3"].append(hr_hyb)
 
-    refs_arr = np.array(refs, dtype=np.float64)
+    refs_arr = np.array(refs_oximeter, dtype=np.float64)
+    refs_ppg_arr = np.array(refs_ppg, dtype=np.float64)
     os.makedirs("artifacts/ubfc", exist_ok=True)
 
     summary_rows = []
     for m_name, p_list in method_preds.items():
         p_arr = np.array(p_list, dtype=np.float64)
         met = compute_all_metrics(p_arr, refs_arr)
+        met_ppg = compute_all_metrics(p_arr, refs_ppg_arr)
         summary_rows.append({
             "Method": m_name,
             "N_Subjects": len(refs_arr),
+            "MAE_PPG_SOTA_BPM": met_ppg["mae"],
+            "RMSE_PPG_SOTA_BPM": met_ppg["rmse"],
+            "Pearson_r_PPG_SOTA": met_ppg["pearson_r"],
             "MAE_BPM": met["mae"],
             "RMSE_BPM": met["rmse"],
             "Pearson_r": met["pearson_r"],
@@ -144,22 +148,24 @@ def evaluate_all_video_methods(loader: UBFCDataLoader, max_frames: int = None):
         df_m = pd.DataFrame({
             "subject_id": subj_ids,
             "ground_truth_bpm": np.round(refs_arr, 2),
+            "ppg_waveform_gt_bpm": np.round(refs_ppg_arr, 2),
             "estimated_bpm": np.round(p_arr, 2),
             "error_bpm": np.round(np.abs(p_arr - refs_arr), 2),
+            "error_vs_ppg_bpm": np.round(np.abs(p_arr - refs_ppg_arr), 2),
             "skin_type": skin_types,
         })
         df_m.to_csv(f"artifacts/ubfc/ubfc_video_{m_name}_results.csv", index=False)
-        if len(refs_arr) > 2:
+        if len(refs_ppg_arr) > 2:
             plot_dual_bland_altman(
-                p_arr, refs_arr,
+                p_arr, refs_ppg_arr,
                 f"artifacts/ubfc/ubfc_video_{m_name}_bland_altman.png",
-                title_prefix=m_name,
+                title_prefix=f"{m_name} (vs Contact PPG GT)",
             )
 
     df_summary = pd.DataFrame(summary_rows)
     df_summary.to_csv("artifacts/ubfc/ubfc_ablation_summary.csv", index=False)
     print("\n" + "=" * 75)
-    print("UBFC VIDEO MULTI-METHOD ABLATION SUMMARY:")
+    print("UBFC VIDEO MULTI-METHOD ABLATION SUMMARY (SOTA PPG GT & OXIMETER GT):")
     print("=" * 75)
     print(df_summary.to_string(index=False))
     return df_summary
@@ -235,3 +241,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

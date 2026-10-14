@@ -4,75 +4,131 @@ Extracts facial landmarks and defines physiological Regions of Interest (ROIs):
 - Forehead
 - Left cheek
 - Right cheek
-- Lower face boundary (for C7 mask occlusion detection)
+- Lower face boundary (covering mid-nose, bilateral cheeks, mouth, and chin for C7 mask occlusion)
 """
 
 from typing import Dict, List, Tuple, Optional, Union
 import cv2
 import numpy as np
-import mediapipe as mp
+
+try:
+    import mediapipe as mp
+    _HAS_MEDIAPIPE = True
+except ImportError:
+    mp = None
+    _HAS_MEDIAPIPE = False
 
 
 class FaceMeshTracker:
-    """MediaPipe FaceMesh facial landmark and ROI extractor."""
+    """MediaPipe FaceMesh facial landmark and ROI extractor with OpenCV fallback."""
 
     def __init__(self, max_num_faces: int = 1, refine_landmarks: bool = True):
-        self.mp_face_mesh = mp.solutions.face_mesh
-        self.face_mesh = self.mp_face_mesh.FaceMesh(
-            static_image_mode=False,
-            max_num_faces=max_num_faces,
-            refine_landmarks=refine_landmarks,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
-        )
+        self.max_num_faces = max_num_faces
+        if _HAS_MEDIAPIPE and hasattr(mp, "solutions") and hasattr(mp.solutions, "face_mesh"):
+            self.mp_face_mesh = mp.solutions.face_mesh
+            self.face_mesh = self.mp_face_mesh.FaceMesh(
+                static_image_mode=False,
+                max_num_faces=max_num_faces,
+                refine_landmarks=refine_landmarks,
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+            self._cascade = None
+        else:
+            self.face_mesh = None
+            cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            self._cascade = cv2.CascadeClassifier(cascade_path)
 
         # Standard MediaPipe landmark indices for physiological ROIs
-        # Forehead landmark polygon
-        self.forehead_indices = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109]
-        # Specific key forehead center points
-        self.forehead_roi_pts = [10, 67, 69, 108, 109, 10, 338, 297, 299, 337]
-        # Left cheek points (viewer's left or subject's right)
+        self.forehead_indices = [
+            10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288,
+            397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
+            172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
+        ]
+        # Specific key forehead center points safely below hairline
+        self.forehead_roi_pts = [151, 67, 69, 108, 109, 338, 297, 299, 337]
+        # Left cheek points
         self.left_cheek_pts = [117, 118, 100, 126, 209, 49, 129, 203, 205, 50]
-        # Right cheek points (viewer's right or subject's left)
+        # Right cheek points
         self.right_cheek_pts = [346, 347, 329, 355, 429, 279, 358, 423, 425, 280]
-        # Lower face points below nose tip (for C7 mask occlusion)
-        self.lower_face_pts = [164, 167, 165, 92, 186, 57, 43, 106, 182, 83, 18, 313, 406, 335, 273, 287, 410, 322, 391, 393, 152]
+        # Full lower-face surgical mask boundary (nasal bridge + bilateral cheeks + jawline + chin)
+        self.lower_face_pts = [
+            6, 197, 195,
+            234, 117, 118, 100, 126, 209, 49, 50, 205, 93, 132, 58, 172, 136, 150, 149, 176, 148,
+            152,
+            377, 400, 378, 379, 365, 397, 288, 361, 323, 425, 280, 279, 429, 355, 329, 347, 346, 454,
+        ]
 
     def process_frame(
         self,
         frame_bgr: np.ndarray,
         return_all_faces: bool = False,
     ) -> Union[Dict[str, np.ndarray], List[Dict[str, np.ndarray]]]:
-        """Process a single frame and extract landmark coordinates.
-
-        Args:
-            frame_bgr: Image in BGR uint8 format.
-            return_all_faces: If True, return list of dicts for all detected faces.
-
-        Returns:
-            Single face dict (if return_all_faces is False) or list of face dicts.
-        """
+        """Process a single frame and extract landmark coordinates."""
         h, w = frame_bgr.shape[:2]
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        results = self.face_mesh.process(frame_rgb)
 
-        def _fallback():
-            cx, cy = w // 2, int(h * 0.5)
-            rx, ry = int(w * 0.25), int(h * 0.35)
-            xmin, xmax = max(0, cx - rx), min(w, cx + rx)
-            ymin, ymax = max(0, cy - ry), min(h, cy + ry)
+        def _make_box_dict(xmin: int, ymin: int, xmax: int, ymax: int):
+            bw = max(1, xmax - xmin)
+            bh = max(1, ymax - ymin)
+            fh_pts = np.array([
+                [xmin + int(0.25 * bw), ymin + int(0.08 * bh)],
+                [xmin + int(0.75 * bw), ymin + int(0.08 * bh)],
+                [xmin + int(0.75 * bw), ymin + int(0.26 * bh)],
+                [xmin + int(0.25 * bw), ymin + int(0.26 * bh)],
+            ], dtype=np.int32)
+            lc_pts = np.array([
+                [xmin + int(0.18 * bw), ymin + int(0.50 * bh)],
+                [xmin + int(0.42 * bw), ymin + int(0.50 * bh)],
+                [xmin + int(0.42 * bw), ymin + int(0.76 * bh)],
+                [xmin + int(0.18 * bw), ymin + int(0.76 * bh)],
+            ], dtype=np.int32)
+            rc_pts = np.array([
+                [xmin + int(0.58 * bw), ymin + int(0.50 * bh)],
+                [xmin + int(0.82 * bw), ymin + int(0.50 * bh)],
+                [xmin + int(0.82 * bw), ymin + int(0.76 * bh)],
+                [xmin + int(0.58 * bw), ymin + int(0.76 * bh)],
+            ], dtype=np.int32)
+            lower_pts = np.array([
+                [xmin + int(0.06 * bw), ymin + int(0.44 * bh)],
+                [xmin + int(0.50 * bw), ymin + int(0.38 * bh)],
+                [xmin + int(0.94 * bw), ymin + int(0.44 * bh)],
+                [xmin + int(0.88 * bw), ymin + int(0.88 * bh)],
+                [xmin + int(0.50 * bw), ymin + int(0.98 * bh)],
+                [xmin + int(0.12 * bw), ymin + int(0.88 * bh)],
+            ], dtype=np.int32)
             return {
                 "bbox": np.array([xmin, ymin, xmax, ymax], dtype=np.int32),
-                "forehead_pts": np.array([[cx - rx // 2, cy - ry // 2], [cx + rx // 2, cy - ry // 2], [cx + rx // 2, cy - ry // 4], [cx - rx // 2, cy - ry // 4]], dtype=np.int32),
-                "left_cheek_pts": np.array([[cx - rx // 2, cy], [cx - rx // 4, cy], [cx - rx // 4, cy + ry // 4], [cx - rx // 2, cy + ry // 4]], dtype=np.int32),
-                "right_cheek_pts": np.array([[cx + rx // 4, cy], [cx + rx // 2, cy], [cx + rx // 2, cy + ry // 4], [cx + rx // 4, cy + ry // 4]], dtype=np.int32),
-                "lower_face_pts": None,
+                "forehead_pts": fh_pts,
+                "left_cheek_pts": lc_pts,
+                "right_cheek_pts": rc_pts,
+                "lower_face_pts": lower_pts,
                 "landmarks": None,
             }
 
-        if not results.multi_face_landmarks:
-            fb = _fallback()
+        def _fallback():
+            if self._cascade is not None:
+                gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+                det = self._cascade.detectMultiScale(gray, 1.1, 4)
+                if len(det) > 0:
+                    boxes = []
+                    for (x, y, bw_d, bh_d) in det[:self.max_num_faces]:
+                        boxes.append(_make_box_dict(int(x), int(y), int(x + bw_d), int(y + bh_d)))
+                    return boxes if return_all_faces else boxes[0]
+            cx, cy = w // 2, int(h * 0.5)
+            rx, ry = int(w * 0.22), int(h * 0.32)
+            xmin, xmax = max(0, cx - rx), min(w, cx + rx)
+            ymin, ymax = max(0, cy - ry), min(h, cy + ry)
+            fb = _make_box_dict(xmin, ymin, xmax, ymax)
             return [fb] if return_all_faces else fb
+
+        if self.face_mesh is None:
+            return _fallback()
+
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        results = self.face_mesh.process(frame_rgb)
+
+        if not results.multi_face_landmarks:
+            return _fallback()
 
         extracted_faces = []
         for face_landmarks in results.multi_face_landmarks:
@@ -101,4 +157,6 @@ class FaceMeshTracker:
         return extracted_faces[0]
 
     def close(self):
-        self.face_mesh.close()
+        if self.face_mesh is not None:
+            self.face_mesh.close()
+
