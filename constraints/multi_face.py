@@ -184,4 +184,3 @@ def simulate_multi_person_video(
         composite[t, y1:y2, x1:x2] = np.where(mask, bystander, composite[t, y1:y2, x1:x2])
 
     return composite
-

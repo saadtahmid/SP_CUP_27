@@ -6,7 +6,7 @@ Pattern Recognition Letters.
 
 Provides both:
 - `gt_mean_hr`: Line 2 CMS50E finger-oximeter display HR average
-- `gt_ppg_hr`: Line 1 synchronized contact PPG waveform dominant CZT HR (standard SOTA benchmark protocol)
+- `gt_ppg_hr`: Line 1 synchronized contact PPG waveform dominant CZT HR (evaluated at exact timestamp clock)
 """
 
 import os
@@ -29,7 +29,10 @@ class UBFCDataLoader:
         self.subjects = self._discover_subjects()
 
     def _discover_subjects(self) -> List[Dict[str, str]]:
-        subj_dirs = sorted(glob.glob(os.path.join(self.data_root, "subject*")))
+        subj_dirs = sorted(
+            glob.glob(os.path.join(self.data_root, "subject*")),
+            key=lambda x: int(os.path.basename(x).replace("subject", "")),
+        )
         subjects = []
         for d in subj_dirs:
             subj_id = os.path.basename(d)
@@ -66,7 +69,8 @@ class UBFCDataLoader:
         valid_hr = hr[hr > 40.0]
         mean_hr_bpm = float(np.mean(valid_hr)) if len(valid_hr) > 0 else float(np.mean(hr))
 
-        czt = CZTHRTransformer(fs=30.0, low_hz=0.7, high_hz=3.0, num_bins=512)
+        true_fps = float((len(timestamps) - 1) / (timestamps[-1] - timestamps[0])) if len(timestamps) > 1 else 30.0
+        czt = CZTHRTransformer(fs=true_fps, low_hz=0.7, high_hz=3.0, num_bins=512)
         ppg_hr_bpm = float(czt.estimate_hr(ppg)) if len(ppg) >= 8 else mean_hr_bpm
 
         return {
@@ -78,7 +82,7 @@ class UBFCDataLoader:
         }
 
     def process_subject(self, subject_info: Dict[str, str], max_frames: Optional[int] = None) -> Dict[str, any]:
-        """Extract RGB traces and both Line-1 PPG and Line-2 Oximeter ground-truth HR from a UBFC subject."""
+        """Extract R4 RGB traces and both Line-1 PPG and Line-2 Oximeter ground-truth HR at exact timestamp FPS."""
         gt_data = self.load_ground_truth(subject_info["gt_path"])
         vid_path = subject_info["video_path"]
 
@@ -97,7 +101,7 @@ class UBFCDataLoader:
             raise FileNotFoundError(f"Video not found for {subject_info['subject_id']}")
 
         cap = cv2.VideoCapture(vid_path)
-        fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
+        vid_fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
         frames = []
         count = 0
         while True:
@@ -109,12 +113,16 @@ class UBFCDataLoader:
         cap.release()
 
         frames_arr = np.array(frames)
+        n_ext = len(frames_arr)
+        ts = gt_data["timestamps"][:n_ext]
+        fps = float((len(ts) - 1) / (ts[-1] - ts[0])) if len(ts) > 1 and (ts[-1] - ts[0]) > 0 else vid_fps
+
         extractor = ROIExtractor()
         extracted = extractor.process_video(frames_arr, fs=fps)
+        extractor.close()
 
         skin_info = analyze_skin_tone(extracted["skin_sample"])
 
-        n_ext = len(frames_arr)
         aligned_gt_hr = gt_data["hr"][:n_ext] if len(gt_data["hr"]) >= n_ext else gt_data["hr"]
         valid_aligned = aligned_gt_hr[aligned_gt_hr > 40.0]
         mean_gt_hr = float(np.mean(valid_aligned)) if len(valid_aligned) > 0 else float(np.mean(aligned_gt_hr))
@@ -132,8 +140,7 @@ class UBFCDataLoader:
             "fps": fps,
             "skin_tone": skin_info,
             "gt_hr_series": aligned_gt_hr,
-            "gt_timestamps": gt_data["timestamps"][:n_ext],
+            "gt_timestamps": ts,
             "gt_mean_hr": mean_gt_hr,
             "gt_ppg_hr": ppg_gt_hr,
         }
-
