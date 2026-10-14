@@ -30,3 +30,11 @@ artifacts/constraints/*.mp4
 .venv/
 env/
 venv/
+
+# Large binaries for hub import
+*.mat
+submission/Round1_Baseline/*.mat
+
+# Release and patch archives / directories
+FaceVitals_*
+

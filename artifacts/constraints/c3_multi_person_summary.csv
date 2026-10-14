@@ -1,2 +1,2 @@
 constraint,distractor_hr,target_gt_hr,tracked_hr,error_bpm
-C3 Multi-Person,115.0,112.39,112.15,0.24
+C3 Multi-Person,115.0,112.39,112.14,0.25

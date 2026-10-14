@@ -4,7 +4,7 @@ Extracts facial landmarks and defines physiological Regions of Interest (ROIs):
 - Forehead
 - Left cheek
 - Right cheek
-- Lower face boundary (covering mid-nose, bilateral cheeks, mouth, and chin for C7 mask occlusion)
+- Lower face boundary (for C7 mask occlusion detection)
 """
 
 from typing import Dict, List, Tuple, Optional, Union
@@ -24,10 +24,11 @@ class FaceMeshTracker:
 
     def __init__(self, max_num_faces: int = 1, refine_landmarks: bool = True):
         self.max_num_faces = max_num_faces
+        self.refine_landmarks = refine_landmarks
         if _HAS_MEDIAPIPE and hasattr(mp, "solutions") and hasattr(mp.solutions, "face_mesh"):
             self.mp_face_mesh = mp.solutions.face_mesh
             self.face_mesh = self.mp_face_mesh.FaceMesh(
-                static_image_mode=False,
+                static_image_mode=True,
                 max_num_faces=max_num_faces,
                 refine_landmarks=refine_landmarks,
                 min_detection_confidence=0.5,
@@ -45,19 +46,17 @@ class FaceMeshTracker:
             397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136,
             172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109,
         ]
-        # Specific key forehead center points safely below hairline
-        self.forehead_roi_pts = [151, 67, 69, 108, 109, 338, 297, 299, 337]
-        # Left cheek points
+        self.forehead_roi_pts = [10, 67, 69, 108, 109, 10, 338, 297, 299, 337]
         self.left_cheek_pts = [117, 118, 100, 126, 209, 49, 129, 203, 205, 50]
-        # Right cheek points
         self.right_cheek_pts = [346, 347, 329, 355, 429, 279, 358, 423, 425, 280]
-        # Full lower-face surgical mask boundary (nasal bridge + bilateral cheeks + jawline + chin)
         self.lower_face_pts = [
-            6, 197, 195,
-            234, 117, 118, 100, 126, 209, 49, 50, 205, 93, 132, 58, 172, 136, 150, 149, 176, 148,
-            152,
-            377, 400, 378, 379, 365, 397, 288, 361, 323, 425, 280, 279, 429, 355, 329, 347, 346, 454,
+            164, 167, 165, 92, 186, 57, 43, 106, 182, 83, 18,
+            313, 406, 335, 273, 287, 410, 322, 391, 393, 152,
         ]
+
+    def reset(self):
+        """No-op reset since static_image_mode=True is stateless across frames."""
+        pass
 
     def process_frame(
         self,
@@ -71,30 +70,30 @@ class FaceMeshTracker:
             bw = max(1, xmax - xmin)
             bh = max(1, ymax - ymin)
             fh_pts = np.array([
-                [xmin + int(0.25 * bw), ymin + int(0.08 * bh)],
-                [xmin + int(0.75 * bw), ymin + int(0.08 * bh)],
-                [xmin + int(0.75 * bw), ymin + int(0.26 * bh)],
-                [xmin + int(0.25 * bw), ymin + int(0.26 * bh)],
+                [xmin + int(0.25 * bw), ymin + int(0.12 * bh)],
+                [xmin + int(0.75 * bw), ymin + int(0.12 * bh)],
+                [xmin + int(0.75 * bw), ymin + int(0.28 * bh)],
+                [xmin + int(0.25 * bw), ymin + int(0.28 * bh)],
             ], dtype=np.int32)
             lc_pts = np.array([
                 [xmin + int(0.18 * bw), ymin + int(0.50 * bh)],
                 [xmin + int(0.42 * bw), ymin + int(0.50 * bh)],
-                [xmin + int(0.42 * bw), ymin + int(0.76 * bh)],
-                [xmin + int(0.18 * bw), ymin + int(0.76 * bh)],
+                [xmin + int(0.42 * bw), ymin + int(0.75 * bh)],
+                [xmin + int(0.18 * bw), ymin + int(0.75 * bh)],
             ], dtype=np.int32)
             rc_pts = np.array([
                 [xmin + int(0.58 * bw), ymin + int(0.50 * bh)],
                 [xmin + int(0.82 * bw), ymin + int(0.50 * bh)],
-                [xmin + int(0.82 * bw), ymin + int(0.76 * bh)],
-                [xmin + int(0.58 * bw), ymin + int(0.76 * bh)],
+                [xmin + int(0.82 * bw), ymin + int(0.75 * bh)],
+                [xmin + int(0.58 * bw), ymin + int(0.75 * bh)],
             ], dtype=np.int32)
             lower_pts = np.array([
-                [xmin + int(0.06 * bw), ymin + int(0.44 * bh)],
-                [xmin + int(0.50 * bw), ymin + int(0.38 * bh)],
-                [xmin + int(0.94 * bw), ymin + int(0.44 * bh)],
-                [xmin + int(0.88 * bw), ymin + int(0.88 * bh)],
+                [xmin + int(0.18 * bw), ymin + int(0.58 * bh)],
+                [xmin + int(0.50 * bw), ymin + int(0.54 * bh)],
+                [xmin + int(0.82 * bw), ymin + int(0.58 * bh)],
+                [xmin + int(0.78 * bw), ymin + int(0.92 * bh)],
                 [xmin + int(0.50 * bw), ymin + int(0.98 * bh)],
-                [xmin + int(0.12 * bw), ymin + int(0.88 * bh)],
+                [xmin + int(0.22 * bw), ymin + int(0.92 * bh)],
             ], dtype=np.int32)
             return {
                 "bbox": np.array([xmin, ymin, xmax, ymax], dtype=np.int32),
@@ -115,7 +114,7 @@ class FaceMeshTracker:
                         boxes.append(_make_box_dict(int(x), int(y), int(x + bw_d), int(y + bh_d)))
                     return boxes if return_all_faces else boxes[0]
             cx, cy = w // 2, int(h * 0.5)
-            rx, ry = int(w * 0.22), int(h * 0.32)
+            rx, ry = int(w * 0.25), int(h * 0.35)
             xmin, xmax = max(0, cx - rx), min(w, cx + rx)
             ymin, ymax = max(0, cy - ry), min(h, cy + ry)
             fb = _make_box_dict(xmin, ymin, xmax, ymax)
@@ -159,4 +158,3 @@ class FaceMeshTracker:
     def close(self):
         if self.face_mesh is not None:
             self.face_mesh.close()
-
