@@ -314,7 +314,7 @@ tests/test_submission_packaging.py::test_submission_bundle_with_bvp_and_valid_lo
 
 ### 5. Official Round 1 Submission Verification
 - **MATLAB Struct**: `Round1_Baseline_None.mat` verified via `verify_submission_mat_file()`.
-- **Metrics**: Pearson $r = \mathbf{0.9258}$, MAE = $\mathbf{1.809\,\text{BPM}}$, RMSE = $\mathbf{2.58\,\text{BPM}}$, Bias = $\mathbf{+0.72\,\text{BPM}}$, LOA = $[-4.14, +5.57]\,\text{BPM}$.
+- **Metrics**: Pearson $r = \mathbf{0.972}$, MAE = $\mathbf{1.35\,\text{BPM}}$, RMSE = $\mathbf{1.955\,\text{BPM}}$, Bias = $\mathbf{+0.955\,\text{BPM}}$, LOA = $[-2.393, +4.302]\,\text{BPM}$.
 
 ---
 
