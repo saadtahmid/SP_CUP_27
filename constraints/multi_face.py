@@ -152,8 +152,11 @@ def simulate_multi_person_video(
     distractor_hr_bpm: float = 115.0,
     distractor_scale: float = 0.35,
     fs: float = 30.0,
+    fps: Optional[float] = None,
 ) -> np.ndarray:
     """Embed a secondary bystander face into the frame pulsing at a conflicting heart rate (C3)."""
+    if fps is not None:
+        fs = fps
     t_len, h, w, _ = target_frames.shape
     composite = np.copy(target_frames)
 

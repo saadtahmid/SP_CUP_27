@@ -188,11 +188,17 @@ class ROIExtractor:
         self,
         frame_bgr: np.ndarray,
         mask_occlusion_active: bool = False,
+        compute_skin_sample: bool = True,
     ) -> Dict[str, any]:
         """Extract R4 sub-ROI RGB means and 36x36 face crop from a single frame."""
         h, w = frame_bgr.shape[:2]
         if self._locked_bbox is None:
-            res = self.tracker.process_frame(frame_bgr)
+            mean_val = float(np.mean(frame_bgr))
+            if 0.5 < mean_val < 40.0:
+                det_frame = np.clip(frame_bgr.astype(np.float32) * (120.0 / mean_val), 0, 255).astype(np.uint8)
+            else:
+                det_frame = frame_bgr
+            res = self.tracker.process_frame(det_frame)
             self._locked_bbox = res["bbox"].copy()
 
         x1, y1, x2, y2 = [int(v) for v in self._locked_bbox]
@@ -213,22 +219,22 @@ class ROIExtractor:
         face_rgb_norm = cv2.cvtColor(face_resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
 
         # R4 Locked Sub-ROI Coordinates inside [x1, y1, x2, y2]
-        mask_fh = np.zeros((h, w), dtype=np.uint8)
-        mask_lc = np.zeros((h, w), dtype=np.uint8)
-        mask_rc = np.zeros((h, w), dtype=np.uint8)
-
         fh_y1, fh_y2 = max(0, y1 + int(0.12 * bh)), min(h, y1 + int(0.28 * bh))
         fh_x1, fh_x2 = max(0, x1 + int(0.25 * bw)), min(w, x1 + int(0.75 * bw))
         ch_y1, ch_y2 = max(0, y1 + int(0.50 * bh)), min(h, y1 + int(0.75 * bh))
         lc_x1, lc_x2 = max(0, x1 + int(0.18 * bw)), min(w, x1 + int(0.42 * bw))
         rc_x1, rc_x2 = max(0, x1 + int(0.58 * bw)), min(w, x1 + int(0.82 * bw))
 
-        mask_fh[fh_y1:fh_y2, fh_x1:fh_x2] = 255
-        mask_lc[ch_y1:ch_y2, lc_x1:lc_x2] = 255
-        mask_rc[ch_y1:ch_y2, rc_x1:rc_x2] = 255
+        fh_bgr = frame_bgr[fh_y1:fh_y2, fh_x1:fh_x2]
+        lc_bgr = frame_bgr[ch_y1:ch_y2, lc_x1:lc_x2]
+        rc_bgr = frame_bgr[ch_y1:ch_y2, rc_x1:rc_x2]
+
+        fh_rgb = fh_bgr[:, :, ::-1].reshape(-1, 3)
+        lc_rgb = lc_bgr[:, :, ::-1].reshape(-1, 3)
+        rc_rgb = rc_bgr[:, :, ::-1].reshape(-1, 3)
 
         # Detect lower-face surgical mask occlusion strictly inside cheek sub-ROIs (>35% cyan occupancy)
-        cheek_bgr = frame_bgr[(mask_lc | mask_rc) > 0]
+        cheek_bgr = np.vstack([lc_bgr.reshape(-1, 3), rc_bgr.reshape(-1, 3)])
         has_lower_mask = False
         if len(cheek_bgr) > 0:
             cheek_ycrcb = cv2.cvtColor(cheek_bgr.reshape(1, -1, 3), cv2.COLOR_BGR2YCrCb).reshape(-1, 3)
@@ -236,21 +242,31 @@ class ROIExtractor:
             if cyan_frac > 0.35:
                 has_lower_mask = True
 
+        fh_mean = np.mean(fh_rgb, axis=0).astype(np.float64) if len(fh_rgb) > 0 else np.zeros(3)
+        lc_mean = np.mean(lc_rgb, axis=0).astype(np.float64) if len(lc_rgb) > 0 else np.zeros(3)
+        rc_mean = np.mean(rc_rgb, axis=0).astype(np.float64) if len(rc_rgb) > 0 else np.zeros(3)
+
         if mask_occlusion_active or has_lower_mask:
-            roi_mask = mask_fh.copy()
+            mean_rgb = fh_mean.copy()
         else:
-            roi_mask = mask_fh | mask_lc | mask_rc
+            n_fh, n_lc, n_rc = len(fh_rgb), len(lc_rgb), len(rc_rgb)
+            n_tot = max(1, n_fh + n_lc + n_rc)
+            mean_rgb = (n_fh * fh_mean + n_lc * lc_mean + n_rc * rc_mean) / float(n_tot)
 
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        fh_mean = np.mean(frame_rgb[mask_fh > 0], axis=0).astype(np.float64)
-        lc_mean = np.mean(frame_rgb[mask_lc > 0], axis=0).astype(np.float64)
-        rc_mean = np.mean(frame_rgb[mask_rc > 0], axis=0).astype(np.float64)
-        mean_rgb = np.mean(frame_rgb[roi_mask > 0], axis=0).astype(np.float64)
+        roi_mask = np.zeros((h, w), dtype=np.uint8)
+        roi_mask[fh_y1:fh_y2, fh_x1:fh_x2] = 255
+        if not (mask_occlusion_active or has_lower_mask):
+            roi_mask[ch_y1:ch_y2, lc_x1:lc_x2] = 255
+            roi_mask[ch_y1:ch_y2, rc_x1:rc_x2] = 255
 
-        comb_pix = frame_rgb[roi_mask > 0]
-        filt_comb_pix, fh_ratio = filter_skin_pixels(frame_rgb[mask_fh > 0], return_ratio=True)
-        _, lc_ratio = filter_skin_pixels(frame_rgb[mask_lc > 0], return_ratio=True)
-        _, rc_ratio = filter_skin_pixels(frame_rgb[mask_rc > 0], return_ratio=True)
+        if compute_skin_sample:
+            filt_comb_pix, fh_ratio = filter_skin_pixels(fh_rgb, return_ratio=True)
+            _, lc_ratio = filter_skin_pixels(lc_rgb, return_ratio=True)
+            _, rc_ratio = filter_skin_pixels(rc_rgb, return_ratio=True)
+        else:
+            filt_comb_pix = fh_rgb[:100]
+            fh_ratio, lc_ratio, rc_ratio = 0.90, 0.90, 0.90
+
         if has_lower_mask or mask_occlusion_active:
             lc_ratio, rc_ratio = 0.0, 0.0
 
@@ -259,7 +275,7 @@ class ROIExtractor:
             "roi_mask": roi_mask,
             "face_crop_36x36": face_rgb_norm,
             "bbox": self._locked_bbox.copy(),
-            "skin_pixels": filt_comb_pix if len(filt_comb_pix) > 0 else comb_pix,
+            "skin_pixels": filt_comb_pix if len(filt_comb_pix) > 0 else fh_rgb,
             "sub_rois": {
                 "forehead": fh_mean,
                 "left_cheek": lc_mean,
@@ -315,7 +331,12 @@ class ROIExtractor:
         mask_frames_count = 0
 
         for t in range(t_len):
-            out = self.extract_from_frame(frames[t], mask_occlusion_active=mask_occlusion_active)
+            do_skin = (t % 10 == 0)
+            out = self.extract_from_frame(
+                frames[t],
+                mask_occlusion_active=mask_occlusion_active,
+                compute_skin_sample=do_skin,
+            )
             rgb_signals[t] = out["mean_rgb"]
             cropped_faces[t] = out["face_crop_36x36"]
             roi_masks[t] = out["roi_mask"]
@@ -323,9 +344,10 @@ class ROIExtractor:
                 mask_frames_count += 1
             for k in sub_roi_rgb:
                 sub_roi_rgb[k][t] = out["sub_rois"][k]
-                sub_roi_ratios_acc[k].append(out["sub_roi_skin_ratios"][k])
+                if do_skin:
+                    sub_roi_ratios_acc[k].append(out["sub_roi_skin_ratios"][k])
 
-            if t % 10 == 0 and len(out["skin_pixels"]) > 0:
+            if do_skin and len(out["skin_pixels"]) > 0:
                 all_skin_pixels.append(out["skin_pixels"][:100])
 
         mask_detected = mask_occlusion_active or (mask_frames_count > 0.5 * t_len)
@@ -336,11 +358,13 @@ class ROIExtractor:
             cropped_faces = np.clip(cropped_faces * video_gain, 0.0, 1.0)
 
         skin_sample = np.vstack(all_skin_pixels) if all_skin_pixels else frames[0].reshape(-1, 3)
-        mean_skin_ratios = {k: float(np.mean(v)) for k, v in sub_roi_ratios_acc.items()}
+        mean_skin_ratios = {k: float(np.mean(v)) if v else 0.85 for k, v in sub_roi_ratios_acc.items()}
 
         if mask_detected:
             sub_roi_weights = {"forehead": 1.0, "left_cheek": 0.0, "right_cheek": 0.0}
             rgb_signals = sub_roi_rgb["forehead"].copy()
+            mean_skin_ratios["left_cheek"] = 0.0
+            mean_skin_ratios["right_cheek"] = 0.0
         else:
             sub_roi_weights = {"forehead": 0.25, "left_cheek": 0.375, "right_cheek": 0.375}
 

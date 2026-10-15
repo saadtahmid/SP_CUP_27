@@ -1,7 +1,7 @@
-Configuration,Spectral Estimator,BBox & Skin Filter,Denoiser / Attention,UBFC Baseline Error (BPM),C1 (10 lux) Error (BPM),C7 (Masked) Error (BPM)
-Baseline v0 (Unstabilized ROI + Welch FFT),Welch FFT,Raw Per-Frame,None (Classical),15.23,16.97,11.76
-+ CZT Zooming (BeatFormer 512-bin CZT),512-bin CZT,Unfiltered Single ROI,None (Classical),12.81,13.47,12.71
-+ ROI Stabilization & Skin/Mask Gate (Locked R4 Sub-ROI),512-bin CZT,Locked R4 Sub-ROI + Mask Gate,Gated Sub-ROI Classical,3.47,3.83,3.4
-Pipeline v2 (ME-rPPG State-Space),512-bin CZT,Locked BBox + 45-Frame RMA Warmup,ME-rPPG State-Space,1.46,1.56,2.04
-+ FreqPhys PFD (Fundamental-Verified PFD),512-bin CZT,Locked BBox + 45-Frame RMA Warmup,ME-rPPG + PFD,0.1,0.01,0.01
-Pipeline v3/v4 (Full Majority-Consensus Hybrid),512-bin CZT,Locked R4 Sub-ROI + Mask Gate,ME-rPPG + PFD + BeatFormer + CHROM,0.24,0.01,0.02
+Configuration,Spectral Estimator,BBox & Skin Filter,Denoiser / Attention,N,Baseline_MAE_BPM,Baseline_SD_BPM,C1_50lux_MAE_BPM,C1_50lux_SD_BPM,C1_10lux_MAE_BPM,C1_10lux_SD_BPM,C7_Masked_MAE_BPM,C7_Masked_SD_BPM
+1. Baseline v0 (POS + Welch FFT),Welch FFT,Raw Full BBox,None (POS),10,13.13,16.31,17.24,12.61,23.69,18.71,20.38,13.95
+2. + CZT Zooming (POS + 512-bin CZT),512-bin CZT,Raw Full BBox,None (POS),10,7.83,11.26,15.54,13.74,20.08,12.03,17.16,15.04
+3. + Locked R4 Sub-ROI & Mask Gate (CHROM),512-bin CZT,Locked R4 Sub-ROI + Mask Gate,Chrominance (CHROM),10,2.06,2.98,20.25,13.15,15.19,9.09,2.62,4.87
+4. Pipeline v2 (ME-rPPG State-Space),512-bin CZT,Locked BBox + 36x36 Crop,ME-rPPG State-Space,10,2.15,1.97,6.86,9.38,16.33,13.99,3.07,4.12
+5. + FreqPhys PFD (Fundamental-Verified),512-bin CZT,Locked BBox + 36x36 Crop,ME-rPPG + PFD,10,1.51,2.49,4.85,5.67,17.24,13.87,1.43,2.56
+6. Pipeline v3/v4 (Full Consensus Hybrid),512-bin CZT,Locked R4 Sub-ROI + Mask Gate,ME-rPPG + PFD + BeatFormer + CHROM,10,1.55,2.49,4.88,5.6,17.21,13.89,1.5,2.54
