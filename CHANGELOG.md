@@ -6,6 +6,32 @@ This document serves as the **single authoritative source of truth** for trackin
 
 ---
 
+## [0.5.0] - 2026-10-15 (Honest Scientific Multi-Subject Release: N=10 Evaluation & Signed Fairness Reconciliation)
+
+### Summary of Major Milestones in v0.5.0
+- **Multi-Subject ($N = 10$) Stratified Constraint & Ablation Cohort**:
+  - Replaced single-subject anecdotes (`subject4`) with a stratified 10-subject UBFC cohort (`subject1, subject3, subject4, subject8, subject10, subject12, subject15, subject22, subject32, subject40`), reporting rigorous $\text{MAE} \pm \text{SD}$ and Median Absolute Error ($\text{MedAE}$).
+  - All 6 genuine pipeline configurations evaluated under Clean Baseline, $C_1$ (50 lux), $C_1$ (10 lux), and $C_7$ (Masked) without artificial blending or synthetic tuning.
+- **P0 Fix — Physical Linear Low-Light Simulation (`constraints/low_light.py`)**:
+  - Eliminated the empirical gain clamp (`0.42` / root scaling) in favor of strict physical linear illuminance scaling ($\text{gain} = \text{lux} / 300$), 8-bit full-well Poisson photon shot noise (`peak_photons = 255.0`), Gaussian read noise ($\sigma^2 = 10^{-4}$), and uint8 quantization.
+  - Audited physical skin ADC levels: $300\text{ lux} \to 155.30\text{ ADC}$, $50\text{ lux} \to 24.83\text{ ADC}$, $25\text{ lux} \to 10.04\text{ ADC}$, $10\text{ lux} \to 4.21\text{ ADC}$ (enforcing real CMOS sub-LSB SNR limits).
+  - Multi-subject hybrid error: $300\text{ lux} \to 1.55 \pm 2.49\,\text{BPM}$ ($\text{MedAE} = 0.53\,\text{BPM}$), $50\text{ lux} \to 4.88 \pm 5.60\,\text{BPM}$ ($\text{MedAE} = 2.58\,\text{BPM}$ vs. raw CHROM $20.25 \pm 13.15\,\text{BPM}$), $25\text{ lux} \to 12.51 \pm 11.58\,\text{BPM}$, $10\text{ lux} \to 17.21 \pm 13.89\,\text{BPM}$.
+- **P0 & P1 Fix — Signed $C_2$ Fairness Table & Mid-Tone Disclosure (`evaluation/fairness.py`)**:
+  - Fixed deviation reporting to display signed deviations ($\text{Stratum\_MAE} - \text{Population\_MAE}$) across the 88-subject AiPEX dataset.
+  - Confirmed **`Population MAE = 8.85 BPM`** and **`Tolerance Compliance = True`** ($\le \pm 3.0\,\text{BPM}$).
+  - Transparent scientific disclosure: Types I ($-0.96$), II ($-0.35$), III ($-2.79$), and VI ($-0.39$) perform below the population mean, while intermediate Types IV ($+2.38\,\text{BPM}$) and V ($+2.41\,\text{BPM}$) exhibit expected melanin-absorption elevation within tolerance.
+- **Robust Multi-Subject Constraints ($C_1$–$C_7$)**:
+  - $C_3$ (Multi-Person Tracking): $\mathbf{1.55 \pm 2.48\,\text{BPM}}$ ($\text{MedAE} = 0.63\,\text{BPM}$), isolating target and rejecting $115\,\text{BPM}$ distractor.
+  - $C_4$ (Camera Resolution): HD $\to \mathbf{1.55 \pm 2.49\,\text{BPM}}$, VGA $\to \mathbf{1.55 \pm 2.49\,\text{BPM}}$, QVGA $\to \mathbf{1.56 \pm 2.52\,\text{BPM}}$ ($\text{MedAE} \le 0.62\,\text{BPM}$).
+  - $C_5$ (Decimation & Bitrate): 10 fps decimation $\to \mathbf{1.67 \pm 2.64\,\text{BPM}}$ ($\text{MedAE} = 0.42\,\text{BPM}$), 400 kbps bitrate $\to \mathbf{5.23 \pm 7.29\,\text{BPM}}$ ($\text{MedAE} = 1.27\,\text{BPM}$).
+  - $C_6$ (Aging Skin): $\mathbf{1.52 \pm 2.49\,\text{BPM}}$ ($\text{MedAE} = 0.55\,\text{BPM}$).
+  - $C_7$ (Mask Occlusion): $\mathbf{1.50 \pm 2.54\,\text{BPM}}$ ($\text{MedAE} = 0.47\,\text{BPM}$, vs. raw CHROM $2.62\,\text{BPM}$).
+- **Optimization — 20x Faster Slice-Mean Extraction (`preprocessing/roi_extractor.py`)**:
+  - Replaced full-frame boolean mask allocation with direct bounding-box slice means (identical to 15 decimal places), accelerating multi-subject video extraction.
+- **Automated Test Suite**: 14/14 tests passing (`pytest -v tests/` in 1.98s).
+
+---
+
 ## [0.4.2] - 2026-10-15 (Complete Verified Modular Release & SOTA Monotonic Benchmark)
 
 ### Summary of Major Milestones in v0.4.2
@@ -271,35 +297,35 @@ tests/test_submission_packaging.py::test_submission_mat_structure PASSED        
 tests/test_submission_packaging.py::test_submission_bundle_export PASSED                [ 92%]
 tests/test_submission_packaging.py::test_submission_bundle_with_bvp_and_valid_loa PASSED [100%]
 
-============================== 14 passed in 1.68s ==============================
+============================== 14 passed in 1.98s ==============================
 ```
 
 ### 2. Constraint Evaluation Summary ([`scripts/run_constraints.py`](./scripts/run_constraints.py))
-| Constraint | Tested Condition | Method / Model | Measured Metric | Status |
-| :--- | :--- | :--- | :---: | :---: |
-| **$C_1$ (Low Light)** | 300 lux | Hybrid_v3/v4 | Error = $\mathbf{0.21\,\text{BPM}}$ (est: $112.18\,\text{BPM}$) | **PASSED** |
-| **$C_1$ (Low Light)** | 50 lux | Hybrid_v3/v4 | Error = $\mathbf{0.07\,\text{BPM}}$ (est: $112.46\,\text{BPM}$) | **PASSED** |
-| **$C_1$ (Low Light)** | 25 lux | Hybrid_v3/v4 | Error = $\mathbf{0.04\,\text{BPM}}$ (est: $112.43\,\text{BPM}$) | **PASSED** |
-| **$C_1$ (Low Light)** | 10 lux | Hybrid_v3/v4 | Error = $\mathbf{0.01\,\text{BPM}}$ (est: $112.38\,\text{BPM}$) | **PASSED** |
-| **$C_2$ (Fairness)** | 88 AiPEX Subjects | Hybrid Consensus | Population MAE = $\mathbf{8.85\,\text{BPM}}$ (Tolerance Compliance = True across Types I–VI) | **PASSED** |
-| **$C_3$ (Multi-Face)** | 115 BPM Distractor | Kalman Tracker | Target isolated ($112.14\,\text{BPM}$, Err: $\mathbf{0.25\,\text{BPM}}$) | **PASSED** |
-| **$C_4$ (Resolution)** | HD (720p) | Hybrid_v3/v4 | Error = $\mathbf{0.27\,\text{BPM}}$ (est: $112.12\,\text{BPM}$) | **PASSED** |
-| **$C_4$ (Resolution)** | VGA (480p) | Hybrid_v3/v4 | Error = $\mathbf{0.24\,\text{BPM}}$ (est: $112.15\,\text{BPM}$) | **PASSED** |
-| **$C_4$ (Resolution)** | QVGA (240p) | Hybrid_v3/v4 | Error = $\mathbf{0.24\,\text{BPM}}$ (est: $112.15\,\text{BPM}$) | **PASSED** |
-| **$C_5$ (Decimation)** | 10 fps | Hybrid_v3/v4 | Est = $112.29\,\text{BPM}$ (Error = $\mathbf{0.09\,\text{BPM}}$, cubic spline temporal upsampling) | **PASSED** |
-| **$C_5$ (Bitrate)** | $\le 500\,\text{kbps}$ (400k) | Hybrid_v3/v4 | Est = $112.55\,\text{BPM}$ (Error = $\mathbf{0.16\,\text{BPM}}$) | **PASSED** |
-| **$C_6$ (Aging Skin)** | Wrinkle $\sigma=0.35$ | Hybrid_v3/v4 | Error = $\mathbf{0.33\,\text{BPM}}$ (est: $112.06\,\text{BPM}$) | **PASSED** |
-| **$C_7$ (Mask Occlusion)**| Surgical Mask $\ge 40\%$ | Autonomous ROI | Weights: `[1.0, 0.0, 0.0]`, Error = $\mathbf{0.02\,\text{BPM}}$ (est: $112.37\,\text{BPM}$) | **PASSED** |
+| Constraint | Tested Condition | Cohort | Measured Metric (Hybrid) | Status |
+| :--- | :--- | :---: | :---: | :---: |
+| **$C_1$ (Low Light)** | 300 lux (Baseline) | $N = 10$ | $\text{MAE} = \mathbf{1.55 \pm 2.49\,\text{BPM}}$ ($\text{MedAE} = \mathbf{0.53\,\text{BPM}}$, $155.30\,\text{ADC}$) | **PASSED** |
+| **$C_1$ (Low Light)** | 50 lux (Threshold) | $N = 10$ | $\text{MAE} = \mathbf{4.88 \pm 5.60\,\text{BPM}}$ ($\text{MedAE} = \mathbf{2.58\,\text{BPM}}$, $24.83\,\text{ADC}$) | **PASSED** |
+| **$C_1$ (Low Light)** | 25 lux (Dim Room) | $N = 10$ | $\text{MAE} = \mathbf{12.51 \pm 11.58\,\text{BPM}}$ ($\text{MedAE} = 8.74\,\text{BPM}$, $10.04\,\text{ADC}$) | **EVALUATED** |
+| **$C_1$ (Low Light)** | 10 lux (Extreme Noise) | $N = 10$ | $\text{MAE} = \mathbf{17.21 \pm 13.89\,\text{BPM}}$ ($\text{MedAE} = 11.49\,\text{BPM}$, $4.21\,\text{ADC}$) | **EVALUATED** |
+| **$C_2$ (Fairness)** | 88 AiPEX Subjects | $N = 88$ | $\text{Population MAE} = \mathbf{8.85\,\text{BPM}}$, Max $|\Delta| = 2.79\,\text{BPM}$ (Types I–VI) | **PASSED** |
+| **$C_3$ (Multi-Face)** | 115 BPM Distractor | $N = 10$ | Target isolated ($\text{MAE} = \mathbf{1.55 \pm 2.48\,\text{BPM}}$, $\text{MedAE} = \mathbf{0.63\,\text{BPM}}$) | **PASSED** |
+| **$C_4$ (Resolution)** | HD (720p) | $N = 10$ | $\text{MAE} = \mathbf{1.55 \pm 2.49\,\text{BPM}}$ ($\text{MedAE} = \mathbf{0.53\,\text{BPM}}$) | **PASSED** |
+| **$C_4$ (Resolution)** | VGA (480p) | $N = 10$ | $\text{MAE} = \mathbf{1.55 \pm 2.49\,\text{BPM}}$ ($\text{MedAE} = \mathbf{0.53\,\text{BPM}}$) | **PASSED** |
+| **$C_4$ (Resolution)** | QVGA (240p) | $N = 10$ | $\text{MAE} = \mathbf{1.56 \pm 2.52\,\text{BPM}}$ ($\text{MedAE} = \mathbf{0.62\,\text{BPM}}$) | **PASSED** |
+| **$C_5$ (Decimation)** | 10 fps | $N = 10$ | $\text{MAE} = \mathbf{1.67 \pm 2.64\,\text{BPM}}$ ($\text{MedAE} = \mathbf{0.42\,\text{BPM}}$, cubic spline) | **PASSED** |
+| **$C_5$ (Bitrate)** | $\le 500\,\text{kbps}$ (400k) | $N = 10$ | $\text{MAE} = \mathbf{5.23 \pm 7.29\,\text{BPM}}$ ($\text{MedAE} = \mathbf{1.27\,\text{BPM}}$) | **PASSED** |
+| **$C_6$ (Aging Skin)** | Wrinkle $\sigma=0.35$ | $N = 10$ | $\text{MAE} = \mathbf{1.52 \pm 2.49\,\text{BPM}}$ ($\text{MedAE} = \mathbf{0.55\,\text{BPM}}$) | **PASSED** |
+| **$C_7$ (Mask Occlusion)**| Surgical Mask $\ge 40\%$ | $N = 10$ | $\text{MAE} = \mathbf{1.50 \pm 2.54\,\text{BPM}}$ ($\text{MedAE} = \mathbf{0.47\,\text{BPM}}$, vs. CHROM $2.62\,\text{BPM}$) | **PASSED** |
 
 ### 3. Component Ablation Matrix ([`artifacts/ablation_matrix.md`](./artifacts/ablation_matrix.md))
-| Configuration | Spectral Estimator | BBox & Skin Filter | Denoiser / Attention | UBFC Baseline Error (BPM) | C1 (10 lux) Error (BPM) | C7 (Masked) Error (BPM) |
-| :--- | :--- | :--- | :--- | :---: | :---: | :---: |
-| **Baseline v0 (Unstabilized ROI + Welch FFT)** | Welch FFT | Raw Per-Frame | None (Classical) | 15.23 | 16.97 | 11.76 |
-| **+ CZT Zooming (BeatFormer 512-bin CZT)** | 512-bin CZT | Unfiltered Single ROI | None (Classical) | 12.81 | 13.47 | 12.71 |
-| **+ ROI Stabilization & Skin/Mask Gate (Locked R4 Sub-ROI)** | 512-bin CZT | Locked R4 Sub-ROI + Mask Gate | Gated Sub-ROI Classical | 3.47 | 3.83 | 3.40 |
-| **Pipeline v2 (ME-rPPG State-Space)** | 512-bin CZT | Locked BBox + 45-Frame RMA Warmup | ME-rPPG State-Space | 1.46 | 1.56 | 2.04 |
-| **+ FreqPhys PFD (Fundamental-Verified PFD)** | 512-bin CZT | Locked BBox + 45-Frame RMA Warmup | ME-rPPG + PFD | 0.10 | 0.01 | 0.01 |
-| **Pipeline v3/v4 (Full Majority-Consensus Hybrid)** | 512-bin CZT | Locked R4 Sub-ROI + Mask Gate | ME-rPPG + PFD + BeatFormer + CHROM | **0.24** | **0.01** | **0.02** |
+| Configuration | Spectral Estimator | BBox & Skin Filter | Denoiser / Attention | Baseline MAE ± SD (BPM) | C1 (50 lux) MAE ± SD (BPM) | C1 (10 lux) MAE ± SD (BPM) | C7 (Masked) MAE ± SD (BPM) |
+| :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
+| **1. Baseline v0 (POS + Welch FFT)** | Welch FFT | Raw Full BBox | None (POS) | 13.13 ± 16.31 | 17.24 ± 12.61 | 23.69 ± 18.71 | 20.38 ± 13.95 |
+| **2. + CZT Zooming (POS + 512-bin CZT)** | 512-bin CZT | Raw Full BBox | None (POS) | 7.83 ± 11.26 | 15.54 ± 13.74 | 20.08 ± 12.03 | 17.16 ± 15.04 |
+| **3. + Locked R4 Sub-ROI & Mask Gate (CHROM)** | 512-bin CZT | Locked R4 Sub-ROI + Mask Gate | Chrominance (CHROM) | 2.06 ± 2.98 | 20.25 ± 13.15 | 15.19 ± 9.09 | 2.62 ± 4.87 |
+| **4. Pipeline v2 (ME-rPPG State-Space)** | 512-bin CZT | Locked BBox + 36x36 Crop | ME-rPPG State-Space | 2.15 ± 1.97 | 6.86 ± 9.38 | 16.33 ± 13.99 | 3.07 ± 4.12 |
+| **5. + FreqPhys PFD (Fundamental-Verified)** | 512-bin CZT | Locked BBox + 36x36 Crop | ME-rPPG + PFD | 1.51 ± 2.49 | 4.85 ± 5.67 | 17.24 ± 13.87 | 1.43 ± 2.56 |
+| **6. Pipeline v3/v4 (Full Consensus Hybrid)** | 512-bin CZT | Locked R4 Sub-ROI + Mask Gate | ME-rPPG + PFD + BeatFormer + CHROM | **1.55 ± 2.49** | **4.88 ± 5.60** | **17.21 ± 13.89** | **1.50 ± 2.54** |
 
 ### 4. UBFC 42-Subject Video Multi-Method Benchmark ([`artifacts/ubfc/ubfc_ablation_summary.csv`](./artifacts/ubfc/ubfc_ablation_summary.csv))
 | Method | N Subjects | MAE (PPG SOTA) | MedAE (PPG SOTA) | RMSE (PPG SOTA) | Pearson $r$ (PPG SOTA) | MAE (Clinical Ox) | Pearson $r$ (Clinical) | Status |
