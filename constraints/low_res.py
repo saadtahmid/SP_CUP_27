@@ -1,6 +1,6 @@
 """Constraint C4 (Low Resolution) and Constraint C5 (Frame-Rate Decimation & Bitrate).
 
-C4: Downsamples HD video (1280x720) to VGA (640x480) and QVGA (320x240) using bicubic interpolation.
+C4: Resizes video frames to HD (1280x720), VGA (640x480), or QVGA (320x240) using bicubic interpolation.
 C5: Decimates video frame rate from >=30 fps down to 10 fps and compresses video to <= 500 kbps.
 """
 
@@ -14,13 +14,14 @@ import numpy as np
 
 def apply_low_resolution_c4(
     frame: np.ndarray,
-    target_resolution: str = "VGA",  # 'VGA' (640x480), 'QVGA' (320x240)
+    target_resolution: str = "VGA",  # 'HD' (1280x720), 'VGA' (640x480), 'QVGA' (320x240)
 ) -> np.ndarray:
-    """Downsample a frame to VGA or QVGA using bicubic interpolation (MATLAB imresize)."""
-    if target_resolution.upper() == "QVGA":
+    """Resize a frame to HD, VGA, or QVGA using bicubic interpolation (MATLAB imresize)."""
+    res_upper = target_resolution.upper()
+    if res_upper == "QVGA":
         target_w, target_h = 320, 240
-    elif target_resolution.upper() == "VGA":
-        target_w, target_h = 640, 480
+    elif res_upper == "HD":
+        target_w, target_h = 1280, 720
     else:
         target_w, target_h = 640, 480
 
@@ -31,9 +32,12 @@ def simulate_low_res_video(
     frames: np.ndarray,
     target_resolution: str = "VGA",
 ) -> np.ndarray:
-    """Downsample an entire video sequence to VGA or QVGA."""
-    if target_resolution.upper() == "QVGA":
+    """Resize an entire video sequence to HD (1280x720), VGA (640x480), or QVGA (320x240)."""
+    res_upper = target_resolution.upper()
+    if res_upper == "QVGA":
         target_w, target_h = 320, 240
+    elif res_upper == "HD":
+        target_w, target_h = 1280, 720
     else:
         target_w, target_h = 640, 480
 
@@ -87,11 +91,7 @@ def simulate_bitrate_compression_frames(
     target_kbps: int = 400,
     fps: float = 30.0,
 ) -> np.ndarray:
-    """In-memory simulation of bitrate-constrained MPEG-4 compression on a frame array.
-
-    Pipes raw uncompressed frames directly into ffmpeg with `-g 300` so frames are not
-    double-compressed by a prior lossy VideoWriter pass.
-    """
+    """In-memory simulation of bitrate-constrained MPEG-4 compression on a frame array."""
     t_len, h, w, _ = frames.shape
     with tempfile.TemporaryDirectory() as tmpdir:
         comp_mp4 = os.path.join(tmpdir, "compressed.mp4")
