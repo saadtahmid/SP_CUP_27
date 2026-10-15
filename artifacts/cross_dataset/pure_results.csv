@@ -1,0 +1,3 @@
+session_id,subject_id,protocol_code,protocol_name,gt_hr_bpm,gt_ppg_bpm,gt_oximeter_bpm,pos_czt_bpm,chrom_czt_bpm,me_rppg_bpm,hybrid_v4_bpm,pos_error_bpm,chrom_error_bpm,hybrid_error_bpm,pos_error_ppg,chrom_error_ppg,hybrid_error_ppg,hybrid_error_ox,snr_db
+01-01,01,01,Steady,75.0,75.0,75.0,42.0,42.0,180.0,145.46647706092145,33.0,33.0,70.46647706092145,33.0,33.0,70.46647706092145,70.46647706092145,0.0
+01-02,01,02,Talking,75.0,75.0,75.0,42.0,42.0,180.0,145.46647706092145,33.0,33.0,70.46647706092145,33.0,33.0,70.46647706092145,70.46647706092145,0.0
