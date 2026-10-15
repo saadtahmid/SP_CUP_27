@@ -186,4 +186,6 @@ def simulate_multi_person_video(
         mask = (bystander.sum(axis=-1) > 0)[..., None]
         composite[t, y1:y2, x1:x2] = np.where(mask, bystander, composite[t, y1:y2, x1:x2])
 
-    return composite
+    dist_signal = np.sin(2.0 * np.pi * f_dist * (np.arange(t_len) / fs))
+    dist_box = np.array([x1, y1, x2, y2], dtype=np.int32)
+    return composite, dist_box, dist_signal
