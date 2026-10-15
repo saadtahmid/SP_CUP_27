@@ -123,11 +123,14 @@ def test_synthetic_pure_session_generator():
     assert sess["gt_hr"] > 40.0
 
 
-def test_run_cross_dataset_pure_execution(mock_pure_dir):
-    """Verify end-to-end execution of PURE benchmark on mock data."""
-    df = evaluate_pure(data_dir=str(mock_pure_dir), max_subjects=1, max_frames=30)
+def test_run_cross_dataset_pure_execution(mock_pure_dir, tmp_path):
+    """Verify end-to-end execution of PURE benchmark on mock data without overwriting real artifacts."""
+    out_dir = str(tmp_path / "mock_pure_artifacts")
+    df = evaluate_pure(data_dir=str(mock_pure_dir), output_dir=out_dir, max_subjects=1, max_frames=30)
     assert isinstance(df, object)
     assert len(df) > 0
     assert "hybrid_v4_bpm" in df.columns
     assert "pos_error_bpm" in df.columns
     assert "chrom_error_bpm" in df.columns
+    assert (Path(out_dir) / "pure_results.csv").exists()
+    assert (Path(out_dir) / "pure_protocol_summary.csv").exists()

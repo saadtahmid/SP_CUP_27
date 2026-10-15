@@ -32,13 +32,13 @@ via Majority-Consensus State-Space and Spectral Attention Fusion\\[4pt]
 Supervisor: [Faculty Supervisor, Ph.D.]\\
 Undergraduate Members: [Name 1] (SPS \#XXXXX), [Name 2] (SPS \#XXXXX),\\ \relax
 [Name 3] (SPS \#XXXXX), [Name 4], [Name 5], [Name 6]\\
-Software release: \texttt{v0.5.1-Final-Polish} $\cdot$
-Passband $[0.70, 3.00]$\,Hz $\cdot$ 14/14 tests passing}}
+Software release: \texttt{v0.5.2-Cross-Dataset} $\cdot$
+Passband $[0.70, 3.00]$\,Hz $\cdot$ 18/18 tests passing}}
 
 \maketitle
 
 \begin{abstract}
-\noindent Camera-based remote photoplethysmography (rPPG) enables contactless cardiovascular monitoring from ordinary RGB facial video by recovering microvascular blood volume pulse (BVP) fluctuations. However, existing classical and deep-learning methods degrade severely under real-world deployment stressors, including photon starvation at low illuminance ($\le 50\text{ lux}$), epidermal melanin absorption across dark skin tones, bystander interference, spatial compression, and facial mask occlusion. This technical report presents the mathematical formulation, four-stage debugging chronicle (\texttt{v0.3.0} $\to$ \texttt{v0.5.1}), and multi-cohort experimental validation of the \textbf{FaceVitals Majority-Consensus Hybrid rPPG System} developed for Round 1 of the 2027 IEEE Signal Processing Cup~\cite{spcup2027}. The proposed pipeline integrates six synergistic modules: (1) Frame-0 locked \texttt{R4} anatomical sub-ROI extraction (forehead and bilateral cheeks) with YCbCr specular rejection, Rank-1 Non-Negative Matrix Factorization spatial attention~\cite{joshi2024factorizephys}, and autonomous cyan surgical mask gating; (2) illumination-normalized CIE $L^*a^*b^*$ Individual Typology Angle ($\text{ITA}^\circ$) stratification; (3) a 512-bin Chirp-Z Transform (CZT) zoomed spectral estimator ($0.27\text{ BPM/bin}$) with 3-point parabolic vertex interpolation; (4) a 580K-parameter Temporal-Spatial State-Space neural backbone (\texttt{ME-rPPG}~\cite{wang2025merppg}, $9.46\text{ ms}$ CPU latency) with 45-frame Recursive Moving Average (RMA) state pre-warming; (5) a Fundamental-Verified Physiological Frequency-prior Denoiser (\texttt{FreqPhys PFD}~\cite{qian2026freqphys}) that prevents sub-harmonic ($f_{\text{HR}}/2$) inversion; and (6) a 14.86K-parameter Zoomed Orthonormal Complex Attention spectral transformer (\texttt{BeatFormer-SCL}~\cite{comas2025beatformer}) with $\pm 3.5\text{ BPM}$ majority-consensus fusion. Across all 42 UBFC-rPPG subjects~\cite{bobbia2019ubfc}, the hybrid architecture reduces heart rate Mean Absolute Error (MAE) from $8.214\text{ BPM}$ (\texttt{POS+FFT}) to $\mathbf{1.809\text{ BPM}}$ ($\text{MedAE} = 0.463\text{ BPM}$, $r = 0.9258$) on the 450-frame unified protocol and $\mathbf{0.869\text{ BPM}}$ on full-length BVP recordings. Crucially, across all 88 clinical recordings from India and Sierra Leone in the AiPEX dataset~\cite{aipex2024} ($C_2$), architectural consensus achieves $\mathbf{8.85\text{ BPM}}$ population MAE with a maximum subgroup deviation of $\mathbf{2.79\text{ BPM}} \le 3.0\text{ BPM}$ (\textbf{PASSED} across all Fitzpatrick Types I--VI), canceling opposite signed biases that cause standalone \texttt{POS} ($\max\lvert\Delta\rvert=7.23\text{ BPM}$) and \texttt{CHROM} ($\max\lvert\Delta\rvert=4.54\text{ BPM}$) to fail demographic compliance. At the $50\text{ lux}$ low-light threshold ($C_1$, $24.83\text{ ADC}$), the system achieves $\mathbf{4.88 \pm 5.60\text{ BPM}}$ MAE ($\text{MedAE} = 2.58\text{ BPM}$) versus $20.25\text{ BPM}$ for classical \texttt{CHROM}, while passing multi-subject stress tests across constraints $C_3$, $C_4$, $C_5$, $C_6$, and $C_7$.
+\noindent Camera-based remote photoplethysmography (rPPG) enables contactless cardiovascular monitoring from ordinary RGB facial video by recovering microvascular blood volume pulse (BVP) fluctuations. However, existing classical and deep-learning methods degrade severely under real-world deployment stressors, including photon starvation at low illuminance ($\le 50\text{ lux}$), epidermal melanin absorption across dark skin tones, bystander interference, spatial compression, and facial mask occlusion. This technical report presents the mathematical formulation, five-stage debugging chronicle (\texttt{v0.3.0} $\to$ \texttt{v0.5.2}), and multi-cohort experimental validation of the \textbf{FaceVitals Majority-Consensus Hybrid rPPG System} developed for Round 1 of the 2027 IEEE Signal Processing Cup~\cite{spcup2027}. The proposed pipeline integrates six synergistic modules: (1) Frame-0 locked \texttt{R4} anatomical sub-ROI extraction (forehead and bilateral cheeks) with YCbCr specular rejection, Rank-1 Non-Negative Matrix Factorization spatial attention~\cite{joshi2024factorizephys}, and autonomous cyan surgical mask gating; (2) illumination-normalized CIE $L^*a^*b^*$ Individual Typology Angle ($\text{ITA}^\circ$) stratification; (3) a 512-bin Chirp-Z Transform (CZT) zoomed spectral estimator ($0.27\text{ BPM/bin}$) with 3-point parabolic vertex interpolation; (4) a 580K-parameter Temporal-Spatial State-Space neural backbone (\texttt{ME-rPPG}~\cite{wang2025merppg}, $9.46\text{ ms}$ CPU latency) with 45-frame Recursive Moving Average (RMA) state pre-warming; (5) a Fundamental-Verified Physiological Frequency-prior Denoiser (\texttt{FreqPhys PFD}~\cite{qian2026freqphys}) that prevents sub-harmonic ($f_{\text{HR}}/2$) inversion; and (6) a 14.86K-parameter Zoomed Orthonormal Complex Attention spectral transformer (\texttt{BeatFormer-SCL}~\cite{comas2025beatformer}) with $\pm 3.5\text{ BPM}$ majority-consensus fusion. Across all 42 UBFC-rPPG subjects~\cite{bobbia2019ubfc}, the hybrid architecture reduces heart rate Mean Absolute Error (MAE) from $8.214\text{ BPM}$ (\texttt{POS+FFT}) to $\mathbf{1.809\text{ BPM}}$ ($\text{MedAE} = 0.463\text{ BPM}$, $r = 0.9258$) on the 450-frame unified protocol and $\mathbf{0.869\text{ BPM}}$ on full-length BVP recordings. Crucially, across all 88 clinical recordings from India and Sierra Leone in the AiPEX dataset~\cite{aipex2024} ($C_2$), architectural consensus achieves $\mathbf{8.85\text{ BPM}}$ population MAE with a maximum subgroup deviation of $\mathbf{2.79\text{ BPM}} \le 3.0\text{ BPM}$ (\textbf{PASSED} across all Fitzpatrick Types I--VI), canceling opposite signed biases that cause standalone \texttt{POS} ($\max\lvert\Delta\rvert=7.23\text{ BPM}$) and \texttt{CHROM} ($\max\lvert\Delta\rvert=4.54\text{ BPM}$) to fail demographic compliance. At the $50\text{ lux}$ low-light threshold ($C_1$, $24.83\text{ ADC}$), the system achieves $\mathbf{4.88 \pm 5.60\text{ BPM}}$ MAE ($\text{MedAE} = 2.58\text{ BPM}$) versus $20.25\text{ BPM}$ for classical \texttt{CHROM}, while passing multi-subject stress tests across constraints $C_3$, $C_4$, $C_5$, $C_6$, and $C_7$.
 \end{abstract}
 
 \noindent\textbf{\small\textcolor{primary}{Index Terms---}} {\small Remote photoplethysmography (rPPG), Chirp-Z Transform (CZT), state-space duality, frequency-prior denoising, spectral contrastive learning, demographic fairness, IEEE Signal Processing Cup.}
@@ -66,7 +66,7 @@ Because oxyhemoglobin ($\text{HbO}_2$) and deoxyhemoglobin ($\text{Hb}$) exhibit
 
 \begin{table*}[t]
 \centering
-\caption{Overview of the FaceVitals (\texttt{v0.5.1}) Multi-Branch Consensus Architecture, Module Complexities, and Constraint Mapping}
+\caption{Overview of the FaceVitals (\texttt{v0.5.2}) Multi-Branch Consensus Architecture, Module Complexities, and Constraint Mapping}
 \label{tab:arch_overview}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lllll@{}}
@@ -89,7 +89,7 @@ Because oxyhemoglobin ($\text{HbO}_2$) and deoxyhemoglobin ($\text{Hb}$) exhibit
 
 \section{Multi-Branch Consensus Architecture and Mathematical Formulation}
 
-To overcome the conflicting vulnerabilities of purely handcrafted chrominance projections and purely data-driven deep networks, the FaceVitals \texttt{v0.5.1} framework (\texttt{models/hybrid/hybrid\_system.py}) synthesizes classical chrominance physics, state-space deep learning, harmonic frequency-prior denoising, and unsupervised complex spectral attention into a unified consensus architecture summarized in Table~\ref{tab:arch_overview}.
+To overcome the conflicting vulnerabilities of purely handcrafted chrominance projections and purely data-driven deep networks, the FaceVitals \texttt{v0.5.2} framework (\texttt{models/hybrid/hybrid\_system.py}) synthesizes classical chrominance physics, state-space deep learning, harmonic frequency-prior denoising, and unsupervised complex spectral attention into a unified consensus architecture summarized in Table~\ref{tab:arch_overview}.
 
 \subsection{Frame-0 Locked R4 Sub-ROI Topology, Specular Filtering, and Autonomous Cyan Mask Gating}
 
@@ -192,7 +192,7 @@ w_{\text{BF}} &= 0.15\,\mathbb{I}\!\left(\lvert\text{HR}_{\text{BF}} - \text{HR}
 
 \begin{table*}[t]
 \centering
-\caption{Evolutionary Scientific Audit and Bug Resolution Progression Across Repository Releases (\texttt{v0.3.0} $\to$ \texttt{v0.5.1})}
+\caption{Evolutionary Scientific Audit and Bug Resolution Progression Across Repository Releases (\texttt{v0.3.0} $\to$ \texttt{v0.5.2})}
 \label{tab:changelog_audit}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lllll@{}}
@@ -208,15 +208,16 @@ w_{\text{BF}} &= 0.15\,\mathbb{I}\!\left(\lvert\text{HR}_{\text{BF}} - \text{HR}
 \texttt{v0.4.2} $\to$ \texttt{v0.5.1} & \texttt{evaluation/fairness.py} & \texttt{abs()} with \texttt{:+0.2f} printed \texttt{+} on negative subgroup deviations (\texttt{-0.96, -0.35, -2.79, -0.39}) & Reported algebraic signed deviations $\Delta_g = \text{MAE}_g - \text{MAE}_{\text{pop}}$ while checking compliance on $\lvert\Delta_g\rvert \le 3.0\text{ BPM}$ & Verified exact weighted sum $\sum n_g\text{MAE}_g/88 = 8.854\text{ BPM}$ \\
 \texttt{v0.4.2} $\to$ \texttt{v0.5.1} & \texttt{constraints/low\_light.py} & Non-linear tone clamp (\texttt{gain = max(0.42, ratio**0.25)}) prevented dark frames from dropping below 42\% & Restored physical linear scaling (\texttt{gain = target\_lux / baseline\_lux}), 8-bit shot/read noise, and \texttt{uint8} floor & Established physical $C_1$ curve ($155.3 \to 24.8 \to 10.0 \to 4.2\text{ ADC}$) \\
 \texttt{v0.4.2} $\to$ \texttt{v0.5.1} & \texttt{run\_constraints.py}, \texttt{run\_ablation.py} & Constraints $C_1, C_3\text{--}C_7$ and ablation matrix previously evaluated on single subject (\texttt{subject4}) & Upgraded all constraint and ablation benchmarks to stratified 10-subject UBFC cohort (450f PPG GT) & Provided multi-subject $\text{MAE}\pm\text{SD}$ and $\text{MedAE}$ across all benchmarks \\
+\texttt{v0.5.1} $\to$ \texttt{v0.5.2} & \texttt{run\_cross\_dataset.py}, \texttt{test\_cross\_dataset.py} & Mock test runner hardcoded output to \texttt{artifacts/} directory, clobbering real PURE evaluation CSVs & Isolated pytest runner to \texttt{tmp\_path} and regenerated genuine 24-session PURE protocol benchmarks & Verified exact PURE protocol metrics ($0.56\text{ BPM}$ pooled MAE, $r = 0.9958$) across 18/18 tests \\
 \bottomrule
 \end{tabular}%
 }
 \end{table*}
 
-\section{Evolutionary Engineering Chronicle and Scientific Audit (v0.3.0 to v0.5.1)}
+\section{Evolutionary Engineering Chronicle and Scientific Audit (v0.3.0 to v0.5.2)}
 \label{sec:audit}
 
-All architectural decisions in the repository were validated through an iterative scientific audit documented in \texttt{CHANGELOG.md}. Table~\ref{tab:changelog_audit} summarizes the nine critical engineering bugs and paper-to-code gaps resolved between \texttt{v0.3.0} and \texttt{v0.5.1}.
+All architectural decisions in the repository were validated through an iterative scientific audit documented in \texttt{CHANGELOG.md}. Table~\ref{tab:changelog_audit} summarizes the ten critical engineering bugs and paper-to-code gaps resolved between \texttt{v0.3.0} and \texttt{v0.5.2}.
 
 Two audit milestones in \texttt{v0.5.1} warrant particular emphasis. First, in \texttt{constraints/low\_light.py}, an earlier non-linear tone clamp (\texttt{gain = max(0.42, ratio ** 0.25)}, \texttt{peak\_photons = 4096.0}) had artificially prevented $10\text{ lux}$ frames from falling below $42\%$ brightness. Restoring strict physical linear illuminance scaling (\texttt{gain = target\_lux / baseline\_lux}) alongside 8-bit full-well Poisson shot noise (\texttt{peak\_photons = 255.0}), Gaussian read noise ($\sigma^2 = 10^{-4}$), and 8-bit \texttt{uint8} quantization established a physically exact low-light curve across $N=10$ subjects, proving compliance at the competition's $\le 50\text{ lux}$ threshold ($\text{MAE} = 4.88\text{ BPM}$, $\text{MedAE} = 2.58\text{ BPM}$ at $24.83\text{ ADC}$) while transparently documenting the sub-LSB quantization limit at $10\text{ lux}$ ($4.21\text{ ADC}$). Second, in \texttt{evaluation/fairness.py}, preserving the algebraic sign of per-stratum deviations $\Delta_g = \text{MAE}_g - \text{MAE}_{\text{pop}}$ reconciled the exact weighted population arithmetic across all 88 AiPEX subjects:
 \begin{align}
@@ -229,6 +230,7 @@ Two audit milestones in \texttt{v0.5.1} warrant particular emphasis. First, in \
 \section{Multi-Cohort Experimental Validation}
 
 \subsection{Full 42-Subject UBFC-rPPG Video Benchmark}
+\label{sec:exp_ubfc}
 
 The complete 42-subject UBFC-rPPG dataset~\cite{bobbia2019ubfc} (\texttt{scripts/run\_ubfc.py --max\_frames 450}) was evaluated against both ground-truth channels in \texttt{ground\_truth.txt} at each video's exact hardware timestamp clock: (1) the zero-lag synchronized contact PPG waveform dominant CZT frequency (\texttt{PPG SOTA GT}, Line 1), and (2) the causal moving-average CMS50E finger oximeter display series (\texttt{Clinical Ox GT}, Line 2), alongside the full-length 60-second BVP benchmark~\cite{liu2023rppgtoolbox}.
 
@@ -385,7 +387,7 @@ Consistent with visible-spectrum optical physics, intermediate-to-dark Types IV 
 \subsection{Cross-Dataset Generalization and Motion Protocol Degradation on PURE}
 \label{sec:pure}
 
-To evaluate cross-dataset generalization beyond the UBFC optimization cohort without synthetic data, \texttt{scripts/run\_cross\_dataset.py} benchmarks real recordings from the PURE (Pulse Rate Detection) dataset~\cite{stricker2014pure} ($640\times 480$ @ $30\text{ fps}$) against contact pulse oximeter PPG waveforms (evaluated via 512-bin CZT at exact hardware timestamp clock). PURE establishes six standardized operational protocols testing distinct physiological and head-motion dynamics: (1)~\emph{Steady} (frontal resting pose), (2)~\emph{Talking} (speech-induced facial muscle and jaw deformation), (3)~\emph{Slow Translation} (lateral/depth body movement), (4)~\emph{Fast Translation} (rapid head shifts), (5)~\emph{Small Rotation} (pitch/yaw $\le 20^\circ$), and (6)~\emph{Medium Rotation} (pitch/yaw $\le 35^\circ$).
+To evaluate cross-dataset generalization beyond the UBFC optimization cohort without synthetic data, \texttt{scripts/run\_cross\_dataset.py} benchmarks real recordings from the PURE (Pulse Rate Detection) dataset~\cite{stricker2014pure} ($640\times 480$ @ $30\text{ fps}$) against contact pulse oximeter PPG waveforms (evaluated via 512-bin CZT at exact hardware timestamp clock)\footnote{Note that our reference protocol (512-bin CZT dominant frequency of the synchronized contact PPG waveform at the hardware timestamp clock) yields systematically lower MAE than comparing against causally filtered, lagged oximeter display averages, as documented for UBFC in Section~\ref{sec:exp_ubfc}.}. We evaluate the first 4 of 10 PURE subjects ($N = 24$ of 60 available sessions) across all 6 protocols due to download and storage constraints; full-cohort evaluation is part of the ongoing roadmap. PURE establishes six standardized operational protocols testing distinct physiological and head-motion dynamics: (1)~\emph{Steady} (frontal resting pose), (2)~\emph{Talking} (speech-induced facial muscle and jaw deformation), (3)~\emph{Slow Translation} (lateral/depth body movement), (4)~\emph{Fast Translation} (rapid head shifts), (5)~\emph{Small Rotation} (pitch/yaw $\le 20^\circ$), and (6)~\emph{Medium Rotation} (pitch/yaw $\le 35^\circ$).
 
 \begin{table}[t]
 \centering
@@ -396,15 +398,16 @@ To evaluate cross-dataset generalization beyond the UBFC optimization cohort wit
 \toprule
 \textbf{Protocol Code \& Name} & \textbf{Evaluated Motion Dynamic} & \textbf{$N$} & \textbf{POS MAE} & \textbf{CHROM MAE} & \textbf{Hybrid MAE} & \textbf{Hybrid MedAE} & \textbf{Hybrid $r$} \\
 \midrule
-01: Steady & Neutral resting pose & 4 & 0.29 BPM & 0.19 BPM & \textbf{0.38 BPM} & 0.33 BPM & 0.9999 \\
+01: Steady & Neutral resting pose & 4 & 0.29 BPM & \textbf{0.19 BPM} & 0.38 BPM & 0.33 BPM & 0.9999 \\
 02: Talking & Speech / jaw \& mouth motion & 4 & 1.53 BPM & 2.15 BPM & \textbf{1.38 BPM} & 0.91 BPM & 0.9943 \\
-03: Slow Translation & Lateral \& depth displacement & 4 & 5.57 BPM & 0.20 BPM & \textbf{0.46 BPM} & 0.40 BPM & 0.9995 \\
-04: Fast Translation & Rapid head translation & 4 & 0.41 BPM & 0.36 BPM & \textbf{0.76 BPM} & 0.76 BPM & 0.9991 \\
-05: Small Rotation & Pitch/yaw rotation $\le 20^\circ$ & 4 & 0.19 BPM & 0.16 BPM & \textbf{0.26 BPM} & 0.24 BPM & 0.9999 \\
+03: Slow Translation & Lateral \& depth displacement & 4 & 5.57 BPM$^*$ & \textbf{0.20 BPM} & 0.46 BPM & 0.40 BPM & 0.9995 \\
+04: Fast Translation & Rapid head translation & 4 & 0.41 BPM & \textbf{0.36 BPM} & 0.76 BPM & 0.76 BPM & 0.9991 \\
+05: Small Rotation & Pitch/yaw rotation $\le 20^\circ$ & 4 & 0.19 BPM & \textbf{0.16 BPM} & 0.26 BPM & 0.24 BPM & 0.9999 \\
 06: Medium Rotation & Pitch/yaw rotation $\le 35^\circ$ & 4 & 0.29 BPM & 0.60 BPM & \textbf{0.13 BPM} & 0.10 BPM & 1.0000 \\
 \midrule
-\textbf{Pooled PURE Benchmark} & \textbf{All 6 Motion Protocols} & \textbf{24} & \textbf{1.38 BPM} & \textbf{0.61 BPM} & \textbf{0.56 BPM} & \textbf{0.32 BPM} & \textbf{0.9958} \\
+\textbf{Pooled PURE Benchmark} & \textbf{All 6 Motion Protocols} & \textbf{24} & 1.38 BPM & 0.61 BPM & \textbf{0.56 BPM} & \textbf{0.32 BPM} & \textbf{0.9958} \\
 \bottomrule
+\multicolumn{8}{@{}p{\linewidth}@{}}{\vspace{1pt}\footnotesize $^*$Driven by outlier session \texttt{01-03} ($21.42\text{ BPM}$) where non-uniform ambient illumination gradients shifted across the face during lateral movement; the remaining three sessions in this protocol average $0.29\text{ BPM}$.}
 \end{tabular}%
 }
 \end{table}
@@ -416,13 +419,13 @@ To evaluate cross-dataset generalization beyond the UBFC optimization cohort wit
 \label{fig:pure_protocols}
 \end{figure}
 
-As reported in Table~\ref{tab:pure_summary} and Fig.~\ref{fig:pure_protocols}, the training-free Hybrid v4 architecture achieves a pooled cross-dataset MAE of $\mathbf{0.56\text{ BPM}}$ ($\text{MedAE} = \mathbf{0.32\text{ BPM}}$, $\text{RMSE} = 0.91\text{ BPM}$, Pearson $r = \mathbf{0.9958}$) across all 24 evaluated sessions. Crucially, the per-protocol breakdown illuminates key failure modes:
+As reported in Table~\ref{tab:pure_summary} and Fig.~\ref{fig:pure_protocols}, the training-free Hybrid v4 architecture achieves a pooled cross-dataset MAE of $\mathbf{0.56\text{ BPM}}$ ($\text{MedAE} = \mathbf{0.32\text{ BPM}}$, $\text{RMSE} = 0.91\text{ BPM}$, Pearson $r = \mathbf{0.9958}$) across all 24 evaluated sessions. Notably, Hybrid v4 is not uniformly per-protocol optimal across all conditions (standalone CHROM leads under Steady, Fast Translation, and Small Rotation), but architectural consensus provides crucial worst-case protection---bounding POS's $21.42\text{ BPM}$ Slow Translation spike to $0.46\text{ BPM}$---and achieves the lowest pooled error ($0.56\text{ BPM}$ MAE, $0.32\text{ BPM}$ MedAE) and best overall worst-case stability. Crucially, the per-protocol breakdown illuminates key failure modes:
 \begin{itemize}\setlength{\itemsep}{1pt}\setlength{\parskip}{0pt}
-\item \emph{Translation Artifact Cancellation:} During Slow Translation, standalone POS exhibits an error spike to $5.57\text{ BPM}$ ($\max = 21.42\text{ BPM}$ on \texttt{01-03}) because lateral head translation shifts facial regions across non-uniform ambient illumination fields, disrupting POS's orthogonal chrominance projection planes. In contrast, CHROM ($0.20\text{ BPM}$) and Hybrid v4 consensus ($0.46\text{ BPM}$) completely reject this drift.
+\item \emph{Translation Artifact Cancellation:} During Slow Translation, standalone POS exhibits an error spike to $5.57\text{ BPM}$ (driven by outlier session \texttt{01-03} at $21.42\text{ BPM}$ where lateral translation shifted facial regions across non-uniform ambient illumination gradients; the other three sessions average $0.29\text{ BPM}$). In contrast, CHROM ($0.20\text{ BPM}$) and Hybrid v4 consensus ($0.46\text{ BPM}$) completely reject this drift.
 \item \emph{Non-Rigid Jaw Motion:} Talking produces local non-rigid skin stretching around the lower face. Standalone CHROM degrades to $2.15\text{ BPM}$, but multi-branch consensus bounds the error to $1.38\text{ BPM}$ ($\text{MedAE} = 0.91\text{ BPM}$).
 \item \emph{Rotation Stability:} Under both Small ($\le 20^\circ$) and Medium ($\le 35^\circ$) rotation, Hybrid v4 achieves $0.26\text{ BPM}$ and $0.13\text{ BPM}$ MAE, validating that Frame-0 locked R4 forehead/cheek sub-ROI tracking preserves pulsatile optical signal-to-noise ratio under 3D angular pose changes.
 \end{itemize}
-This cross-dataset result ($0.56\text{ BPM}$) compares favorably against published supervised SOTA models evaluated cross-dataset (e.g., FreqPhys~\cite{qian2026freqphys} achieves $0.95\text{ BPM}$ on $\text{UBFC}\to\text{PURE}$ and $10.11\text{ BPM}$ on $\text{PURE}\to\text{MMPD}$), confirming that training-free physical consensus generalizes without supervised domain over-fitting.
+For context, supervised SOTA models evaluated cross-dataset report $0.95\text{ BPM}$ (FreqPhys~\cite{qian2026freqphys} on $\text{UBFC}\to\text{PURE}$); our training-free consensus achieves $0.56\text{ BPM}$ under the same transfer direction, though we note ground-truth extraction protocols differ (waveform CZT vs.\ lagged oximeter display averages).
 
 \subsection{Multi-Subject Evaluation Across Constraints C1, C3, C4, C5, C6, and C7 (N = 10 UBFC Cohort)}
 
@@ -549,7 +552,7 @@ $[-4.14, +5.57]\text{ BPM}$.}
 
 \section{Conclusion}
 
-This report presented the FaceVitals v0.5.1 majority-consensus rPPG system
+This report presented the FaceVitals v0.5.2 majority-consensus rPPG system
 for Round 1 of the 2027 IEEE Signal Processing Cup. Three results carry the
 submission. First, on the complete 42-subject UBFC-rPPG cohort under a
 unified 450-frame hardware-clock protocol, the hybrid reduces MAE from
@@ -565,8 +568,8 @@ rPPG literature. Third, the system passes multi-subject stress tests across
 all seven competition constraints, with honest physical characterization of
 its limits (sub-LSB quantization floor at $10\text{ lux}$; MPEG-4 macroblock
 tails at $400\text{ kbps}$). Every reported number is reproducible via the
-archived scripts, per-subject CSV audits, and a nine-bug root-cause
-engineering chronicle from v0.3.0 to v0.5.1.
+archived scripts, per-subject CSV audits, and a ten-bug root-cause
+engineering chronicle from v0.3.0 to v0.5.2.
 
 \section{Roadmap to Rounds 2 and 3}
 
