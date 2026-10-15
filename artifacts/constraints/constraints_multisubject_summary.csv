@@ -1,14 +1,14 @@
-Constraint,N,MAE_BPM,SD_BPM,MedAE_BPM
-C1 (300 lux Baseline),10,1.55,2.49,0.53
-C1 (50 lux Threshold),10,4.88,5.6,2.58
-C1 (25 lux Dim Room),10,12.51,11.58,8.74
-C1 (10 lux Extreme Noise Floor),10,17.21,13.89,11.49
-C2 (88-Subj AiPEX Fairness),88,8.854,2.791,8.854
-C3 (Multi-Person Tracking),10,1.55,2.48,0.63
-C4 (HD 1280x720),10,1.55,2.49,0.53
-C4 (VGA 640x480),10,1.55,2.49,0.53
-C4 (QVGA 320x240),10,1.56,2.52,0.62
-C5 (10 fps Decimation),10,1.67,2.64,0.42
-C5 (400 kbps Bitrate),10,5.23,7.29,1.27
-C6 (Aging Skin sigma=0.35),10,1.52,2.49,0.55
-C7 (Surgical Mask >=40%),10,1.5,2.54,0.47
+Constraint,N,MAE_BPM,SD_BPM,MedAE_BPM,Notes
+C1 (300 lux Baseline),10,1.55,2.49,0.53,Mean skin 155.3 ADC
+C1 (50 lux Spec Threshold),10,4.88,5.6,2.58,Mean skin 24.8 ADC (PASSED <=50 lux)
+C1 (25 lux Dim Room),10,12.51,11.58,8.74,Mean skin 10.0 ADC
+C1 (10 lux Extreme Noise Floor),10,17.21,13.89,11.49,Mean skin 4.2 ADC (Sub-LSB floor)
+C2 (88-Subj AiPEX Fairness),88,8.854,7.78,6.17,Max Subgroup |Δ|=2.79 BPM (PASSED)
+C3 (Multi-Person Tracking),10,1.55,2.48,0.63,115 BPM distractor rejected
+C4 (HD 1280x720),10,1.5,2.5,0.59,36x36 crop + R4 pool
+C4 (VGA 640x480),10,1.55,2.49,0.53,36x36 crop + R4 pool
+C4 (QVGA 320x240),10,1.56,2.52,0.62,36x36 crop + R4 pool
+C5 (10 fps Decimation),10,1.67,2.64,0.42,Cubic spline 30 Hz reconstruction
+C5 (400 kbps Bitrate),10,5.23,7.29,1.27,"MPEG-4 block tail: ['subject1', 'subject12', 'subject32']"
+C6 (Aging Skin sigma=0.35),10,1.52,2.49,0.55,Directional wrinkle perturbation
+C7 (Surgical Mask >=40%),10,1.5,2.54,0.47,"Autonomous forehead lock [1, 0, 0]"
