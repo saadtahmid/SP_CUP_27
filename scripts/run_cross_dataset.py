@@ -100,6 +100,7 @@ def generate_synthetic_pure_session(
 
 def evaluate_pure(
     data_dir: str,
+    output_dir: Optional[str] = "artifacts/cross_dataset",
     max_subjects: Optional[int] = None,
     max_frames: int = 450,
     synthetic: bool = False,
@@ -237,9 +238,10 @@ def evaluate_pure(
             })
 
     df = pd.DataFrame(results)
-    out_dir = Path("artifacts/cross_dataset")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out_dir / "pure_results.csv", index=False)
+    if output_dir:
+        out_dir = Path(output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out_dir / "pure_results.csv", index=False)
 
     # Compute per-protocol summary
     summary_rows = []
@@ -270,7 +272,8 @@ def evaluate_pure(
         })
 
     sum_df = pd.DataFrame(summary_rows)
-    sum_df.to_csv(out_dir / "pure_protocol_summary.csv", index=False)
+    if output_dir:
+        sum_df.to_csv(out_dir / "pure_protocol_summary.csv", index=False)
 
     print("\n--------------------------------------------------------------------------------")
     print("PURE MOTION PROTOCOL SUMMARY (Per-Protocol Degradation Profile)")
@@ -293,6 +296,8 @@ def main():
                         help="Target dataset to evaluate ('pure', 'mmpd', 'both')")
     parser.add_argument("--data_dir", type=str, default="data/PURE",
                         help="Path to dataset root folder")
+    parser.add_argument("--output_dir", type=str, default="artifacts/cross_dataset",
+                        help="Destination directory for summary CSVs")
     parser.add_argument("--max_subjects", type=int, default=None,
                         help="Optional limit on number of subjects")
     parser.add_argument("--max_frames", type=int, default=450,
@@ -304,6 +309,7 @@ def main():
     if args.dataset in ["pure", "both"]:
         evaluate_pure(
             data_dir=args.data_dir,
+            output_dir=args.output_dir,
             max_subjects=args.max_subjects,
             max_frames=args.max_frames,
             synthetic=args.synthetic,

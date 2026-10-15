@@ -24,6 +24,9 @@ This document serves as the **single authoritative source of truth** for trackin
 3. **Report & Figure Integration**:
    - Added Section IV.D (`Cross-Dataset Generalization and Motion Protocol Degradation on PURE`), Table IV (`tab:pure_summary`), and Fig. 3 (`fig_pure_protocols.png`) into `report.tex`, compiled via `tectonic`.
    - Added automated figure generation in `scripts/generate_report_figures.py` and 4 new automated unit tests in `tests/test_cross_dataset.py` (18/18 total tests passing).
+4. **Resolved Artifact Clobbering in Test Harness (`tests/test_cross_dataset.py`, `scripts/run_cross_dataset.py`)**:
+   - Fixed `test_run_cross_dataset_pure_execution` to output mock fixture data into an isolated `tmp_path`, preventing pytest from overwriting production `artifacts/cross_dataset/` with mock placeholders.
+   - Verified that genuine 24-session PURE CSV artifacts (`pure_results.csv`, `pure_protocol_summary.csv`) and report figures remain intact and reproducible across all 18/18 tests.
 
 ---
 
