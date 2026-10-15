@@ -1,0 +1,3 @@
+protocol_code,protocol_name,count,pos_mae,chrom_mae,hybrid_mae,hybrid_medae,hybrid_rmse,hybrid_pearson_r
+01,Steady,1,33.0,33.0,70.466,70.466,70.466,1.0
+02,Talking,1,33.0,33.0,70.466,70.466,70.466,1.0

@@ -1,6 +1,7 @@
 """Generate IEEE report figures from repository artifacts."""
 import numpy as np
 import pandas as pd
+from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -42,4 +43,27 @@ ax.set_ylabel("MAE (BPM)")
 ax.legend(fontsize=7)
 fig.tight_layout()
 fig.savefig("fig_c1_degradation.png", bbox_inches="tight")
-print("Figures written: fig_bland_altman_subject20.png, fig_c1_degradation.png")
+
+# ---------- Figure 3: PURE Cross-Dataset Motion Protocol Degradation ----------
+if Path("artifacts/cross_dataset/pure_protocol_summary.csv").exists():
+    pure = pd.read_csv("artifacts/cross_dataset/pure_protocol_summary.csv")
+    labels = ["Steady", "Talking", "Slow Tr.", "Fast Tr.", "Sm. Rot.", "Med. Rot."]
+    x = np.arange(len(labels))
+    w = 0.26
+
+    fig, ax = plt.subplots(figsize=(3.5, 2.6), dpi=300)
+    ax.bar(x - w, pure.pos_mae, width=w, label="POS + CZT", color="#7f8c8d", alpha=0.85)
+    ax.bar(x, pure.chrom_mae, width=w, label="CHROM + CZT", color="#c0392b", alpha=0.85)
+    ax.bar(x + w, pure.hybrid_mae, width=w, label="Hybrid v4", color="#0f3d5e")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=6.5, rotation=15)
+    ax.set_ylabel("MAE (BPM)", fontsize=8)
+    ax.set_title("Cross-Dataset PURE Motion Robustness", fontsize=8, fontweight="bold")
+    ax.legend(fontsize=6.5, loc="upper right")
+    ax.grid(axis="y", ls=":", alpha=0.6)
+    fig.tight_layout()
+    fig.savefig("fig_pure_protocols.png", bbox_inches="tight")
+    print("Figures written: fig_bland_altman_subject20.png, fig_c1_degradation.png, fig_pure_protocols.png")
+else:
+    print("Figures written: fig_bland_altman_subject20.png, fig_c1_degradation.png")

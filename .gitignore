@@ -17,6 +17,8 @@ pdf_text.txt
 official_doc.txt
 
 # Dataset video files (downloadable via scripts/download_all_ubfc_hf.py)
+data/
+*.zip
 datasets/ubfc_raw/
 datasets/ubfc_faces/
 datasets/ubfc/*/vid.mp4
