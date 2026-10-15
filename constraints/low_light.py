@@ -1,10 +1,11 @@
 """Low-light (C1) constraint simulation following 2027 IEEE SP Cup / MathWorks guidelines (§2.2 C1).
 
-Implements three physically grounded stages:
-1. Brightness attenuation: Scale pixel intensities using im2double * gain to emulate lux <= 50.
-2. Sensor noise injection: Poisson photon shot noise dominant at low illuminance.
-3. Combined degradation: Brightness attenuation + Gaussian read noise.
-Uses a deterministic local RNG per simulation call so standalone and loop evaluations match identically.
+Implements physically grounded linear illuminance attenuation and CMOS sensor noise:
+1. Linear brightness attenuation: `gain = target_lux / baseline_lux` (at 10 lux vs 300 lux,
+   gain = 1/30 = 0.0333, reducing skin pixels from ~180 ADC counts to ~6 ADC counts).
+2. Sensor photon shot noise: Poisson process scaled to 8-bit full-well equivalent (`peak_photons = 255.0`).
+3. Electronic read noise: Zero-mean Gaussian read floor (`gaussian_var = 1e-4`, sigma ~ 2.5 ADC counts).
+4. 8-bit ADC quantization (`uint8`), permanently enforcing the physical sub-LSB quantization limit at 10 lux.
 """
 
 from typing import Tuple, Union, Optional
@@ -16,37 +17,41 @@ def apply_low_light_c1(
     target_lux: float = 30.0,
     baseline_lux: float = 300.0,
     noise_mode: str = "combined",  # 'attenuation', 'poisson', 'combined'
-    gaussian_var: float = 1e-6,
+    gaussian_var: float = 1e-4,
     rng: Optional[np.random.Generator] = None,
 ) -> np.ndarray:
-    """Degrade a well-lit video frame to low-light conditions (<= 50 lux).
+    """Degrade a well-lit video frame to physical low-light conditions (<= 50 lux).
 
     Args:
         frame: RGB/BGR image (uint8 [0, 255] or float [0, 1]).
-        target_lux: Simulated ambient illuminance in lux (<= 50.0).
+        target_lux: Simulated ambient illuminance in lux (e.g., 50.0, 25.0, 10.0).
         baseline_lux: Original illuminance of baseline recording (nominally 300.0 lux).
         noise_mode: 'attenuation', 'poisson', or 'combined' (MathWorks specs).
-        gaussian_var: Variance for Gaussian read noise.
+        gaussian_var: Variance for Gaussian read noise in normalized [0, 1] units.
         rng: Optional NumPy random Generator for reproducible noise draws.
 
     Returns:
         degraded: Degraded frame in uint8 format [0, 255].
     """
+    if float(target_lux) >= float(baseline_lux):
+        if frame.dtype == np.uint8:
+            return frame.copy()
+        return np.clip(frame * 255.0, 0.0, 255.0).astype(np.uint8)
+
     img = frame.astype(np.float32)
     if img.max() > 1.0:
         img /= 255.0  # equivalent to MATLAB im2double
 
-    # 1. Multiplicative gain factor with CMOS ISP auto-exposure tone response
-    # Preserves sub-LSB pulsatile modulation above the 8-bit uint8 quantization floor at 10-50 lux
-    ratio = max(0.01, min(1.0, float(target_lux) / float(baseline_lux)))
-    gain = max(0.42, min(1.0, ratio ** 0.25))
+    # 1. Strict physical linear illuminance scaling: gain = target_lux / baseline_lux
+    # At 10 lux / 300 lux, gain = 0.0333 -> 180 ADC skin pixels drop to ~6.0 ADC counts
+    gain = max(0.005, min(1.0, float(target_lux) / float(baseline_lux)))
     attenuated = img * gain
 
     if rng is None:
         rng = np.random.default_rng(42)
 
-    # 12-bit CMOS full-well capacity (single attenuation via `attenuated * peak_photons`)
-    peak_photons = 4096.0
+    # 2. 8-bit CMOS photon shot noise + electronic read floor
+    peak_photons = 255.0
 
     if noise_mode == "attenuation":
         degraded = attenuated
@@ -63,7 +68,7 @@ def apply_low_light_c1(
     else:
         degraded = attenuated
 
-    return np.clip(degraded * 255.0, 0.0, 255.0).astype(np.uint8)
+    return np.clip(np.round(degraded * 255.0), 0.0, 255.0).astype(np.uint8)
 
 
 def simulate_low_light_video(
@@ -73,11 +78,10 @@ def simulate_low_light_video(
     noise_mode: str = "combined",
     seed: Optional[int] = 42,
 ) -> np.ndarray:
-    """Apply C1 low-light degradation to an entire video sequence of shape (T, H, W, 3).
+    """Apply physical C1 low-light degradation to an entire video sequence of shape (T, H, W, 3)."""
+    if float(target_lux) >= float(baseline_lux):
+        return frames.copy()
 
-    Uses a deterministic local Generator seeded by `seed` so results at any `target_lux`
-    are 100% identical whether called inside a multi-lux loop or standalone.
-    """
     rng = np.random.default_rng(seed) if seed is not None else np.random.default_rng()
     degraded = np.empty_like(frames, dtype=np.uint8)
     for i in range(len(frames)):

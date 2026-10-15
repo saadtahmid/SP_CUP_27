@@ -1,0 +1,14 @@
+Constraint,N,MAE_BPM,SD_BPM,MedAE_BPM
+C1 (300 lux Baseline),10,1.55,2.49,0.53
+C1 (50 lux Threshold),10,4.88,5.6,2.58
+C1 (25 lux Dim Room),10,12.51,11.58,8.74
+C1 (10 lux Extreme Noise Floor),10,17.21,13.89,11.49
+C2 (88-Subj AiPEX Fairness),88,8.854,2.791,8.854
+C3 (Multi-Person Tracking),10,1.55,2.48,0.63
+C4 (HD 1280x720),10,1.55,2.49,0.53
+C4 (VGA 640x480),10,1.55,2.49,0.53
+C4 (QVGA 320x240),10,1.56,2.52,0.62
+C5 (10 fps Decimation),10,1.67,2.64,0.42
+C5 (400 kbps Bitrate),10,5.23,7.29,1.27
+C6 (Aging Skin sigma=0.35),10,1.52,2.49,0.55
+C7 (Surgical Mask >=40%),10,1.5,2.54,0.47
