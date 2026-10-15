@@ -30,7 +30,7 @@ via Majority-Consensus State-Space and Spectral Attention Fusion\\[4pt]
 \author{\IEEEauthorblockN{[Team Name]}
 \IEEEauthorblockA{[Institution], [City, Country]\\
 Supervisor: [Faculty Supervisor, Ph.D.]\\
-Undergraduate Members: [Name 1] (SPS \#XXXXX), [Name 2] (SPS \#XXXXX),\\
+Undergraduate Members: [Name 1] (SPS \#XXXXX), [Name 2] (SPS \#XXXXX),\\ \relax
 [Name 3] (SPS \#XXXXX), [Name 4], [Name 5], [Name 6]\\
 Software release: \texttt{v0.5.1-Final-Polish} $\cdot$
 Passband $[0.70, 3.00]$\,Hz $\cdot$ 14/14 tests passing}}
@@ -107,7 +107,7 @@ Simultaneously, the $1.25\times$ square crop is downsampled to $(36, 36, 3)$ via
 To reject specular glare, deep shadows, and surgical masks ($C_7$) without manual flags, \texttt{filter\_skin\_pixels()} enforces intensity bounds $3 < R, G, B < 245$ (preserving valid dark pixels down to $4.21\text{ ADC}$ at $10\text{ lux}$) and converts candidate pixels to \texttt{YCrCb}. Surgical masks exhibit a cyan chrominance signature $C_b > 138 \land C_r < 110$. In \texttt{extract\_from\_frame()}, the extractor inspects the bilateral cheek sub-ROIs (\texttt{lc} and \texttt{rc}): if $>35\%$ of cheek pixels fall in the cyan mask band across $>50\%$ of frames, the pipeline autonomously locks spatial fusion weights onto the exposed forehead:
 \begin{equation}
 \mathbf{w}_{\text{ROI}} = \begin{cases}
-[1.000, \, 0.000, \, 0.000]^\top & \text{if } \rho_{\text{cyan}}(\text{cheeks}) > 0.35 \\
+[1.000, \, 0.000, \, 0.000]^\top & \text{if } \rho_{\text{cyan}}(\text{cheeks}) > 0.35 \\ \relax
 [0.250, \, 0.375, \, 0.375]^\top & \text{otherwise (unmasked \texttt{R4})}
 \end{cases}
 \label{eq:mask_gate}
