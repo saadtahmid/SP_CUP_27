@@ -4,6 +4,27 @@ All notable changes, algorithmic refinements, bug fixes, hardware workarounds, a
 
 This document serves as the **single authoritative source of truth** for tracking, debugging, and reproducibility across all project phases.
 
+## [0.5.2] - 2026-10-15 (Cross-Dataset Motion Robustness & Real PURE Benchmark)
+
+### Summary of Cross-Dataset Generalization on PURE (`Thinhnb29/PURE`)
+1. **Real-World Motion Robustness Benchmark without Synthetic Data (`datasets/pure_loader.py`, `scripts/run_cross_dataset.py`)**:
+   - Integrated full dataset loader and verification harness for the official PURE (Pulse Rate Detection) dataset across 4 complete subjects (Subjects 01, 02, 03, 04) spanning all 6 standardized motion protocols ($N = 24$ total sessions @ $30\text{ fps}$, 450-frame evaluation window).
+   - Validated against synchronized contact pulse oximeter PPG waveforms parsed from `/FullPackage` via 512-bin CZT at exact hardware timestamp clocks.
+2. **Verified Per-Protocol Degradation Profile ($N = 24$ Sessions Across 4 Subjects)**:
+   - **01 Steady** (Neutral resting pose, $N=4$): `POS` $= 0.29\text{ BPM}$ | `CHROM` $= 0.19\text{ BPM}$ | **`Hybrid v4` $= 0.38\text{ BPM}$** ($\text{MedAE} = 0.33\text{ BPM}$, $\text{RMSE} = 0.44\text{ BPM}$, $r = 0.9999$)
+   - **02 Talking** (Speech / jaw \& mouth motion, $N=4$): `POS` $= 1.53\text{ BPM}$ | `CHROM` $= 2.15\text{ BPM}$ | **`Hybrid v4` $= 1.38\text{ BPM}$** ($\text{MedAE} = 0.91\text{ BPM}$, $\text{RMSE} = 1.92\text{ BPM}$, $r = 0.9943$)
+   - **03 Slow Translation** (Lateral \& depth body motion, $N=4$): `POS` spikes to $5.57\text{ BPM}$ ($\max = 21.42\text{ BPM}$ on `01-03`) due to lateral illumination field shift; `CHROM` $= 0.20\text{ BPM}$ | **`Hybrid v4` $= 0.46\text{ BPM}$** ($\text{MedAE} = 0.40\text{ BPM}$, $\text{RMSE} = 0.58\text{ BPM}$, $r = 0.9995$)
+   - **04 Fast Translation** (Rapid head translation, $N=4$): `POS` $= 0.41\text{ BPM}$ | `CHROM` $= 0.36\text{ BPM}$ | **`Hybrid v4` $= 0.76\text{ BPM}$** ($\text{MedAE} = 0.76\text{ BPM}$, $\text{RMSE} = 0.82\text{ BPM}$, $r = 0.9991$)
+   - **05 Small Rotation** (Pitch/yaw $\le 20^\circ$, $N=4$): `POS` $= 0.19\text{ BPM}$ | `CHROM` $= 0.16\text{ BPM}$ | **`Hybrid v4` $= 0.26\text{ BPM}$** ($\text{MedAE} = 0.24\text{ BPM}$, $\text{RMSE} = 0.30\text{ BPM}$, $r = 0.9999$)
+   - **06 Medium Rotation** (Pitch/yaw $\le 35^\circ$, $N=4$): `POS` $= 0.29\text{ BPM}$ | `CHROM` $= 0.60\text{ BPM}$ | **`Hybrid v4` $= 0.13\text{ BPM}$** ($\text{MedAE} = 0.10\text{ BPM}$, $\text{RMSE} = 0.15\text{ BPM}$, $r = 1.0000$)
+   - **POOLED OVERALL BENCHMARK ($N = 24$ sessions)**:
+     - `POS + CZT`: $\text{MAE} = \mathbf{1.38\text{ BPM}}$
+     - `CHROM + CZT`: $\text{MAE} = \mathbf{0.61\text{ BPM}}$
+     - **`Hybrid v4` Consensus**: $\text{MAE} = \mathbf{0.56\text{ BPM}}$ ($\text{MedAE} = \mathbf{0.32\text{ BPM}}$, $\text{RMSE} = \mathbf{0.91\text{ BPM}}$, Pearson $r = \mathbf{0.9958}$).
+3. **Report & Figure Integration**:
+   - Added Section IV.D (`Cross-Dataset Generalization and Motion Protocol Degradation on PURE`), Table IV (`tab:pure_summary`), and Fig. 3 (`fig_pure_protocols.png`) into `report.tex`, compiled via `tectonic`.
+   - Added automated figure generation in `scripts/generate_report_figures.py` and 4 new automated unit tests in `tests/test_cross_dataset.py` (18/18 total tests passing).
+
 ---
 
 ## [0.5.1] - 2026-10-15 (Multi-Subject Scientific Audit, Physical C1 Calibration & Signed C2 Fairness Reconciliation)

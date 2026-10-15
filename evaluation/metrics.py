@@ -84,6 +84,7 @@ def compute_all_metrics(
     refs = np.asarray(references, dtype=np.float64)
 
     mae = compute_mae(preds, refs)
+    medae = float(np.median(np.abs(preds - refs)))
     rmse = compute_rmse(preds, refs)
     r = compute_pearson_r(preds, refs)
 
@@ -95,6 +96,7 @@ def compute_all_metrics(
 
     return {
         "mae": round(mae, 3),
+        "medae": round(medae, 3),
         "rmse": round(rmse, 3),
         "pearson_r": round(r, 4),
         "bias": round(bias, 3),

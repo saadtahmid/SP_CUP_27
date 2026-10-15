@@ -5,8 +5,8 @@
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.6.0-orange.svg)
 ![CUDA 12.4](https://img.shields.io/badge/CUDA-12.4-green.svg)
 ![IEEE SPS](https://img.shields.io/badge/IEEE-Signal%20Processing%20Society-00629B.svg)
-![Release](https://img.shields.io/badge/Release-v0.5.1--Final--Polish-blueviolet.svg)
-![Tests](https://img.shields.io/badge/Tests-14%20passed-brightgreen.svg)
+![Release](https://img.shields.io/badge/Release-v0.5.2--Cross--Dataset-blueviolet.svg)
+![Tests](https://img.shields.io/badge/Tests-18%20passed-brightgreen.svg)
 
 An edge-deployable, equitable remote photoplethysmography (rPPG) framework developed for **Round 1 of the 2027 IEEE Signal Processing Cup ("FaceVitals")**.
 
@@ -21,8 +21,9 @@ An edge-deployable, equitable remote photoplethysmography (rPPG) framework devel
 4. [Experimental Benchmarks & Multi-Subject Findings](#4-experimental-benchmarks--multi-subject-findings)
    - [4.1 Full 42-Subject Video Benchmark (UBFC-rPPG)](#41-full-42-subject-video-benchmark-ubfc-rppg)
    - [4.2 Real Clinical Demographic Evaluation (AiPEX Dataset — C2)](#42-real-clinical-demographic-evaluation-aipex-dataset--c2)
-   - [4.3 Multi-Subject Competition Constraint Suite (C1–C7, N = 10 UBFC Cohort)](#43-multi-subject-competition-constraint-suite-c1c7-n--10-ubfc-cohort)
-   - [4.4 Multi-Subject Component Ablation Matrix (N = 10 UBFC Cohort)](#44-multi-subject-component-ablation-matrix-n--10-ubfc-cohort)
+   - [4.3 Cross-Dataset Motion Robustness (PURE Dataset — 6 Protocols)](#43-cross-dataset-motion-robustness-pure-dataset--6-protocols)
+   - [4.4 Multi-Subject Competition Constraint Suite (C1–C7, N = 10 UBFC Cohort)](#44-multi-subject-competition-constraint-suite-c1c7-n--10-ubfc-cohort)
+   - [4.5 Multi-Subject Component Ablation Matrix (N = 10 UBFC Cohort)](#45-multi-subject-component-ablation-matrix-n--10-ubfc-cohort)
 5. [Official Submission Deliverables (§1.2 & §4)](#5-official-submission-deliverables-12--4)
 6. [Codebase Structure & Inventory](#6-codebase-structure--inventory)
 7. [Installation & Reproduction Guide](#7-installation--reproduction-guide)
@@ -149,7 +150,23 @@ Evaluated across **88 clinical human recordings** from India ($n=44$) and Sierra
 * **Why Architectural Consensus Succeeds Where Single Branches Fail**: `POS` and `CHROM` exhibit opposite signed biases on intermediate tones (e.g., on Type II, `POS` errs by $+3.92\text{ BPM}$ while `CHROM` errs by $-4.54\text{ BPM}$; on Type V, `POS` is $-1.15\text{ BPM}$ below its mean while `CHROM` is $+3.22\text{ BPM}$ above). Combining them cancels complementary projection errors, bringing all six Fitzpatrick strata within $\pm 2.79\text{ BPM}$ of the $8.85\text{ BPM}$ population mean.
 * **Melanin-Absorption Disclosure**: Consistent with visible-spectrum optical physics, intermediate-to-dark **Types IV (`11.23 BPM`, `+2.38 BPM`) and V (`11.26 BPM`, `+2.41 BPM`)** retain a moderate $+2.4\text{ BPM}$ elevation above the population mean that remains within the $\pm 3.0\text{ BPM}$ fairness threshold.
 
-### 4.3 Multi-Subject Competition Constraint Suite (C1–C7, N = 10 Stratified UBFC Cohort)
+### 4.3 Cross-Dataset Motion Robustness (PURE Dataset — 6 Motion Protocols, N = 24 Sessions)
+
+Evaluated across **24 real video recordings** from 4 subjects on the external **PURE (Pulse Rate Detection) benchmark** (`https://huggingface.co/datasets/Thinhnb29/PURE`) across all 6 standardized motion protocols (`artifacts/cross_dataset/pure_protocol_summary.csv` and `artifacts/cross_dataset/pure_results.csv`):
+
+| Protocol Code & Name | Evaluated Motion Dynamic | N | POS + CZT MAE | CHROM + CZT MAE | Hybrid v4 MAE (BPM) | Hybrid MedAE | Hybrid Pearson $r$ |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **01: Steady** | Neutral resting pose | 4 | 0.29 BPM | 0.19 BPM | **0.38 BPM** | 0.33 BPM | 0.9999 |
+| **02: Talking** | Speech / jaw \& mouth motion | 4 | 1.53 BPM | 2.15 BPM | **1.38 BPM** | 0.91 BPM | 0.9943 |
+| **03: Slow Translation** | Lateral \& depth displacement | 4 | 5.57 BPM | 0.20 BPM | **0.46 BPM** | 0.40 BPM | 0.9995 |
+| **04: Fast Translation** | Rapid head translation | 4 | 0.41 BPM | 0.36 BPM | **0.76 BPM** | 0.76 BPM | 0.9991 |
+| **05: Small Rotation** | Pitch/yaw rotation $\le 20^\circ$ | 4 | 0.19 BPM | 0.16 BPM | **0.26 BPM** | 0.24 BPM | 0.9999 |
+| **06: Medium Rotation** | Pitch/yaw rotation $\le 35^\circ$ | 4 | 0.29 BPM | 0.60 BPM | **0.13 BPM** | 0.10 BPM | 1.0000 |
+| **Pooled PURE Benchmark** | **All 6 Motion Protocols** | **24** | **1.38 BPM** | **0.61 BPM** | **0.56 BPM** | **0.32 BPM** | **0.9958** |
+
+* **Key Generalization Insight**: Under Slow Translation, classical `POS` suffers a severe error spike to **$5.57\text{ BPM}$** (with individual session errors up to **$21.42\text{ BPM}$** on `01-03`) caused by spatial illumination gradients shifting across the face during lateral translation. In contrast, `CHROM` ($0.20\text{ BPM}$) and `Hybrid v4` ($0.46\text{ BPM}$) maintain sub-1 BPM accuracy. Overall, training-free Hybrid v4 achieves **$0.56\text{ BPM}$ MAE ($0.32\text{ BPM}$ MedAE, $r = 0.9958$)**, outperforming published cross-dataset SOTA benchmarks (e.g. FreqPhys $\text{UBFC}\to\text{PURE} = 0.95\text{ BPM}$) without requiring any training or fine-tuning.
+
+### 4.4 Multi-Subject Competition Constraint Suite (C1–C7, N = 10 Stratified UBFC Cohort)
 
 Evaluated across a stratified 10-subject UBFC cohort (`subject1, subject3, subject4, subject8, subject10, subject12, subject15, subject22, subject32, subject40`; GT spanning $67.17\text{--}121.20\text{ BPM}$, unified 450-frame contact PPG reference):
 
@@ -174,7 +191,7 @@ Evaluated across a stratified 10-subject UBFC cohort (`subject1, subject3, subje
   2. **Why Standalone `CHROM` Peaks at 25 Lux ($30.02\text{ BPM}$) vs 10 Lux ($15.19\text{ BPM}$) in $C_1$**: At 25 lux ($10.04\text{ ADC}$ counts), several high-HR subjects (`subject4`, `subject8`, `subject15`) experience bimodal sub-harmonic lock-in near $50\text{--}60\text{ BPM}$ in standalone `CHROM` ($\text{SD} = 20.15\text{ BPM}$), whereas at 10 lux ($4.21\text{ ADC}$ counts) pure white shot noise flattens the spectrum toward mid-band peaks ($\sim 85\text{--}100\text{ BPM}$), which sits closer to the cohort's mean HR ($95.5\text{ BPM}$). In contrast, `Hybrid v4` degrades monotonically ($1.55 \to 4.88 \to 12.51 \to 17.21\text{ BPM}$).
   3. **Why $C_5$ (400 kbps) Exhibits a Heavy Tail ($\text{MAE} = 5.23 \pm 7.29\text{ BPM}$, $\text{MedAE} = 1.27\text{ BPM}$)**: Seven of the 10 subjects achieve $< 2.0\text{ BPM}$ error under 400 kbps compression ($\text{MedAE} = 1.27\text{ BPM}$), while subjects with rapid facial motion or high-frequency background textures experience $8 \times 8$ MPEG-4 macroblock quantization flicker that aliases into the $[1.0, 2.5]\text{ Hz}$ cardiac band.
 
-### 4.4 Multi-Subject Component Ablation Matrix (N = 10 UBFC Cohort, `[0.70, 3.00] Hz`)
+### 4.5 Multi-Subject Component Ablation Matrix (N = 10 UBFC Cohort, `[0.70, 3.00] Hz`)
 
 Evaluated across the same 10-subject stratified UBFC cohort (`artifacts/ablation_matrix.md`):
 
