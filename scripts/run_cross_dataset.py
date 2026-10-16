@@ -204,9 +204,10 @@ def evaluate_pure(
 
             hr_pos = pipe_pos.process(fused_rgb)["hr_bpm"]
             hr_chrom = pipe_chrom.process(fused_rgb)["hr_bpm"]
-            hr_me = me_engine.process_frames(crops)["hr_bpm"]
+            hr_me_standalone = me_engine.process_frames(crops)["hr_bpm"]
             res_hyb = hybrid_sys.process(crops, rgb_signals=fused_rgb)
             hr_hyb = res_hyb["hr_bpm"]
+            hr_me_anchor = res_hyb.get("hr_anchor_bpm", hr_me_standalone)
 
             err_pos_ppg = abs(hr_pos - gt_ppg)
             err_chrom_ppg = abs(hr_chrom - gt_ppg)
@@ -225,7 +226,8 @@ def evaluate_pure(
                 "gt_oximeter_bpm": gt_ox,
                 "pos_czt_bpm": hr_pos,
                 "chrom_czt_bpm": hr_chrom,
-                "me_rppg_bpm": hr_me,
+                "me_rppg_bpm": hr_me_anchor,
+                "me_rppg_raw_bpm": res_hyb.get("hr_me_raw_bpm", hr_me_standalone),
                 "hybrid_v4_bpm": hr_hyb,
                 "pos_error_bpm": err_pos_ppg,
                 "chrom_error_bpm": err_chrom_ppg,
@@ -290,12 +292,272 @@ def evaluate_pure(
     return df
 
 
+def evaluate_mmpd(
+    data_dir: str = "data/MMPD",
+    output_dir: Optional[str] = "artifacts/cross_dataset",
+    max_subjects: Optional[int] = None,
+    max_frames: int = 450,
+) -> pd.DataFrame:
+    """Benchmark FaceVitals Hybrid v4 and baseline classical methods on real MMPD recordings."""
+    print("================================================================================")
+    print("MMPD CROSS-DATASET BENCHMARK HARNESS (Skin Tone, Motion & Lighting Generalization)")
+    print("================================================================================")
+
+    loader = MMPDDataLoader(data_root=data_dir)
+    recordings = loader.recordings
+    if len(recordings) == 0:
+        print(f"[!] No MMPD recordings found in {data_dir}.")
+        return pd.DataFrame()
+
+    if max_subjects:
+        unique_subjs = sorted(list(set(r["recording_id"].split("_")[0] for r in recordings)))[:max_subjects]
+        recordings = [r for r in recordings if r["recording_id"].split("_")[0] in unique_subjs]
+
+    print(f"[*] Found {len(recordings)} MMPD recordings to evaluate...")
+    extractor = ROIExtractor()
+    results = []
+
+    for idx, rec in enumerate(recordings, 1):
+        rec_id = rec["recording_id"]
+        subj_id = rec_id.split("_")[0]
+        meta = loader.parse_mmpd_mat(rec["mat_path"])
+        light = meta.get("light", "Unknown")
+        motion = meta.get("motion", "Unknown")
+        skin_color = str(meta.get("skin", "Unknown"))
+        exercise = meta.get("exercise", "False")
+
+        frames, fps, gt_hr = loader.load_recording_frames(rec, max_frames=max_frames)
+        if len(frames) == 0:
+            print(f"  [-] Skipping {rec_id}: no frames extracted.")
+            continue
+
+        fused_rgb, crops, sub_rois = extract_session_signals(frames, extractor)
+
+        pipe_pos = ClassicalRPPGPipeline(method="POS", fs=fps, use_czt=True)
+        pipe_chrom = ClassicalRPPGPipeline(method="CHROM", fs=fps, use_czt=True)
+        me_engine = MERPPGEngine(fs=fps)
+        hybrid_sys = HybridRPPGSystem(fs=fps, enable_pfd=True, enable_czt=True, enable_beatformer=True)
+
+        hr_pos = pipe_pos.process(fused_rgb)["hr_bpm"]
+        hr_chrom = pipe_chrom.process(fused_rgb)["hr_bpm"]
+        hr_me_standalone = me_engine.process_frames(crops)["hr_bpm"]
+        res_hyb = hybrid_sys.process(crops, rgb_signals=fused_rgb)
+        hr_hyb = res_hyb["hr_bpm"]
+        hr_me_anchor = res_hyb.get("hr_anchor_bpm", hr_me_standalone)
+        hr_me_raw = res_hyb.get("hr_me_raw_bpm", hr_me_standalone)
+
+        err_pos = abs(hr_pos - gt_hr)
+        err_chrom = abs(hr_chrom - gt_hr)
+        err_me = abs(hr_me_anchor - gt_hr)
+        err_hyb = abs(hr_hyb - gt_hr)
+
+        print(f"  [{idx}/{len(recordings)}] {rec_id} (Skin {skin_color}, {light}, {motion}): GT={gt_hr:.1f} | POS={hr_pos:.1f} (Δ={err_pos:.2f}) | CHROM={hr_chrom:.1f} (Δ={err_chrom:.2f}) | ME={hr_me_anchor:.1f} (Δ={err_me:.2f}) | Hybrid={hr_hyb:.1f} (Δ={err_hyb:.2f})")
+
+        results.append({
+            "recording_id": rec_id,
+            "subject_id": subj_id,
+            "skin_type": skin_color,
+            "light": light,
+            "motion": motion,
+            "exercise": exercise,
+            "gt_hr_bpm": gt_hr,
+            "gt_mat_scalar_bpm": meta.get("gt_mat_scalar_bpm", gt_hr),
+            "pos_czt_bpm": hr_pos,
+            "chrom_czt_bpm": hr_chrom,
+            "me_rppg_raw_bpm": hr_me_raw,
+            "me_rppg_anchor_bpm": hr_me_anchor,
+            "me_rppg_bpm": hr_me_anchor,
+            "hybrid_v4_bpm": hr_hyb,
+            "pos_error_bpm": err_pos,
+            "chrom_error_bpm": err_chrom,
+            "me_error_bpm": err_me,
+            "hybrid_error_bpm": err_hyb,
+            "snr_db": res_hyb.get("snr_db", 0.0),
+        })
+
+    df = pd.DataFrame(results)
+    if output_dir:
+        out_dir = Path(output_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out_dir / "mmpd_results.csv", index=False)
+
+    # Separate into Operational (N=64, non-exercise) and Post-Exercise (N=16) cohorts
+    df_op = df[df["motion"] != "Stationary (after exercise)"]
+    df_ex = df[df["motion"] == "Stationary (after exercise)"]
+
+    summary_rows = []
+
+    # 1. Operational Trials by Skin Type (N=64)
+    for st in sorted(df_op["skin_type"].unique()):
+        sub_df = df_op[df_op["skin_type"] == st]
+        m_pos = compute_all_metrics(sub_df["pos_czt_bpm"].values, sub_df["gt_hr_bpm"].values)
+        m_chrom = compute_all_metrics(sub_df["chrom_czt_bpm"].values, sub_df["gt_hr_bpm"].values)
+        m_me = compute_all_metrics(sub_df["me_rppg_bpm"].values, sub_df["gt_hr_bpm"].values)
+        m_hyb = compute_all_metrics(sub_df["hybrid_v4_bpm"].values, sub_df["gt_hr_bpm"].values)
+        cond_label = f"Fitzpatrick {st.replace('Type ', '')}" if "Type" in st else f"Fitzpatrick {st}"
+        summary_rows.append({
+            "cohort": "Operational",
+            "dimension": "Skin Tone",
+            "condition": cond_label,
+            "count": len(sub_df),
+            "pos_mae": m_pos["mae"],
+            "chrom_mae": m_chrom["mae"],
+            "me_mae": m_me["mae"],
+            "hybrid_mae": m_hyb["mae"],
+            "hybrid_medae": m_hyb["medae"],
+            "hybrid_rmse": m_hyb["rmse"],
+            "hybrid_pearson_r": m_hyb["pearson_r"],
+        })
+
+    # 2. Operational Trials by Lighting Condition (N=64)
+    for lt in sorted(df_op["light"].unique()):
+        sub_df = df_op[df_op["light"] == lt]
+        m_pos = compute_all_metrics(sub_df["pos_czt_bpm"].values, sub_df["gt_hr_bpm"].values)
+        m_chrom = compute_all_metrics(sub_df["chrom_czt_bpm"].values, sub_df["gt_hr_bpm"].values)
+        m_me = compute_all_metrics(sub_df["me_rppg_bpm"].values, sub_df["gt_hr_bpm"].values)
+        m_hyb = compute_all_metrics(sub_df["hybrid_v4_bpm"].values, sub_df["gt_hr_bpm"].values)
+        summary_rows.append({
+            "cohort": "Operational",
+            "dimension": "Lighting",
+            "condition": lt,
+            "count": len(sub_df),
+            "pos_mae": m_pos["mae"],
+            "chrom_mae": m_chrom["mae"],
+            "me_mae": m_me["mae"],
+            "hybrid_mae": m_hyb["mae"],
+            "hybrid_medae": m_hyb["medae"],
+            "hybrid_rmse": m_hyb["rmse"],
+            "hybrid_pearson_r": m_hyb["pearson_r"],
+        })
+
+    # 3. Operational Trials by Motion Condition (N=64)
+    for mt in sorted(df_op["motion"].unique()):
+        sub_df = df_op[df_op["motion"] == mt]
+        m_pos = compute_all_metrics(sub_df["pos_czt_bpm"].values, sub_df["gt_hr_bpm"].values)
+        m_chrom = compute_all_metrics(sub_df["chrom_czt_bpm"].values, sub_df["gt_hr_bpm"].values)
+        m_me = compute_all_metrics(sub_df["me_rppg_bpm"].values, sub_df["gt_hr_bpm"].values)
+        m_hyb = compute_all_metrics(sub_df["hybrid_v4_bpm"].values, sub_df["gt_hr_bpm"].values)
+        summary_rows.append({
+            "cohort": "Operational",
+            "dimension": "Motion",
+            "condition": mt,
+            "count": len(sub_df),
+            "pos_mae": m_pos["mae"],
+            "chrom_mae": m_chrom["mae"],
+            "me_mae": m_me["mae"],
+            "hybrid_mae": m_hyb["mae"],
+            "hybrid_medae": m_hyb["medae"],
+            "hybrid_rmse": m_hyb["rmse"],
+            "hybrid_pearson_r": m_hyb["pearson_r"],
+        })
+
+    # 4. Operational Trials Pooled (N=64)
+    if len(df_op) > 0:
+        m_pos = compute_all_metrics(df_op["pos_czt_bpm"].values, df_op["gt_hr_bpm"].values)
+        m_chrom = compute_all_metrics(df_op["chrom_czt_bpm"].values, df_op["gt_hr_bpm"].values)
+        m_me = compute_all_metrics(df_op["me_rppg_bpm"].values, df_op["gt_hr_bpm"].values)
+        m_hyb = compute_all_metrics(df_op["hybrid_v4_bpm"].values, df_op["gt_hr_bpm"].values)
+        summary_rows.append({
+            "cohort": "Operational",
+            "dimension": "Pooled",
+            "condition": f"All {len(df_op)} Operational Trials",
+            "count": len(df_op),
+            "pos_mae": m_pos["mae"],
+            "chrom_mae": m_chrom["mae"],
+            "me_mae": m_me["mae"],
+            "hybrid_mae": m_hyb["mae"],
+            "hybrid_medae": m_hyb["medae"],
+            "hybrid_rmse": m_hyb["rmse"],
+            "hybrid_pearson_r": m_hyb["pearson_r"],
+        })
+
+    # 5. Non-Stationary Recovery Trials (N=16, after exercise)
+    if len(df_ex) > 0:
+        for st in sorted(df_ex["skin_type"].unique()):
+            sub_df = df_ex[df_ex["skin_type"] == st]
+            m_pos = compute_all_metrics(sub_df["pos_czt_bpm"].values, sub_df["gt_hr_bpm"].values)
+            m_chrom = compute_all_metrics(sub_df["chrom_czt_bpm"].values, sub_df["gt_hr_bpm"].values)
+            m_me = compute_all_metrics(sub_df["me_rppg_bpm"].values, sub_df["gt_hr_bpm"].values)
+            m_hyb = compute_all_metrics(sub_df["hybrid_v4_bpm"].values, sub_df["gt_hr_bpm"].values)
+            cond_label = f"Fitzpatrick {st.replace('Type ', '')}" if "Type" in st else f"Fitzpatrick {st}"
+            summary_rows.append({
+                "cohort": "Post-Exercise",
+                "dimension": "Skin Tone",
+                "condition": cond_label,
+                "count": len(sub_df),
+                "pos_mae": m_pos["mae"],
+                "chrom_mae": m_chrom["mae"],
+                "me_mae": m_me["mae"],
+                "hybrid_mae": m_hyb["mae"],
+                "hybrid_medae": m_hyb["medae"],
+                "hybrid_rmse": m_hyb["rmse"],
+                "hybrid_pearson_r": m_hyb["pearson_r"],
+            })
+
+        m_pos = compute_all_metrics(df_ex["pos_czt_bpm"].values, df_ex["gt_hr_bpm"].values)
+        m_chrom = compute_all_metrics(df_ex["chrom_czt_bpm"].values, df_ex["gt_hr_bpm"].values)
+        m_me = compute_all_metrics(df_ex["me_rppg_bpm"].values, df_ex["gt_hr_bpm"].values)
+        m_hyb = compute_all_metrics(df_ex["hybrid_v4_bpm"].values, df_ex["gt_hr_bpm"].values)
+        summary_rows.append({
+            "cohort": "Post-Exercise",
+            "dimension": "Pooled",
+            "condition": f"All {len(df_ex)} Post-Exercise Trials",
+            "count": len(df_ex),
+            "pos_mae": m_pos["mae"],
+            "chrom_mae": m_chrom["mae"],
+            "me_mae": m_me["mae"],
+            "hybrid_mae": m_hyb["mae"],
+            "hybrid_medae": m_hyb["medae"],
+            "hybrid_rmse": m_hyb["rmse"],
+            "hybrid_pearson_r": m_hyb["pearson_r"],
+        })
+
+    # 6. Overall Combined Pooled (N=80)
+    m_pos = compute_all_metrics(df["pos_czt_bpm"].values, df["gt_hr_bpm"].values)
+    m_chrom = compute_all_metrics(df["chrom_czt_bpm"].values, df["gt_hr_bpm"].values)
+    m_me = compute_all_metrics(df["me_rppg_bpm"].values, df["gt_hr_bpm"].values)
+    m_hyb = compute_all_metrics(df["hybrid_v4_bpm"].values, df["gt_hr_bpm"].values)
+    summary_rows.append({
+        "cohort": "Full Benchmark",
+        "dimension": "Pooled",
+        "condition": f"All {len(df)} Trials Combined",
+        "count": len(df),
+        "pos_mae": m_pos["mae"],
+        "chrom_mae": m_chrom["mae"],
+        "me_mae": m_me["mae"],
+        "hybrid_mae": m_hyb["mae"],
+        "hybrid_medae": m_hyb["medae"],
+        "hybrid_rmse": m_hyb["rmse"],
+        "hybrid_pearson_r": m_hyb["pearson_r"],
+    })
+
+    sum_df = pd.DataFrame(summary_rows)
+    if output_dir:
+        sum_df.to_csv(out_dir / "mmpd_summary.csv", index=False)
+        # Also write separate dedicated operational and post-exercise CSVs
+        sum_df[sum_df["cohort"] == "Operational"].to_csv(out_dir / "mmpd_operational_summary.csv", index=False)
+        if len(df_ex) > 0:
+            sum_df[sum_df["cohort"] == "Post-Exercise"].to_csv(out_dir / "mmpd_exercise_summary.csv", index=False)
+
+    print("\n--------------------------------------------------------------------------------")
+    print("MMPD MULTI-DOMAIN GENERALIZATION SUMMARY (OPERATIONAL COHORT: N=64)")
+    print("--------------------------------------------------------------------------------")
+    print(sum_df[sum_df["cohort"] == "Operational"].to_string(index=False))
+    if len(df_ex) > 0:
+        print("\n--------------------------------------------------------------------------------")
+        print("MMPD NON-STATIONARY POST-EXERCISE RECOVERY SUMMARY (N=16)")
+        print("--------------------------------------------------------------------------------")
+        print(sum_df[sum_df["cohort"] == "Post-Exercise"].to_string(index=False))
+    print("--------------------------------------------------------------------------------\n")
+    return df
+
+
 def main():
     parser = argparse.ArgumentParser(description="Cross-Dataset Benchmark Harness (PURE and MMPD)")
     parser.add_argument("--dataset", type=str, choices=["pure", "mmpd", "both"], default="pure",
                         help="Target dataset to evaluate ('pure', 'mmpd', 'both')")
-    parser.add_argument("--data_dir", type=str, default="data/PURE",
-                        help="Path to dataset root folder")
+    parser.add_argument("--data_dir", type=str, default=None,
+                        help="Path to dataset root folder (default: data/PURE or data/MMPD)")
     parser.add_argument("--output_dir", type=str, default="artifacts/cross_dataset",
                         help="Destination directory for summary CSVs")
     parser.add_argument("--max_subjects", type=int, default=None,
@@ -307,12 +569,22 @@ def main():
     args = parser.parse_args()
 
     if args.dataset in ["pure", "both"]:
+        pure_dir = args.data_dir if (args.data_dir and args.dataset == "pure") else "data/PURE"
         evaluate_pure(
-            data_dir=args.data_dir,
+            data_dir=pure_dir,
             output_dir=args.output_dir,
             max_subjects=args.max_subjects,
             max_frames=args.max_frames,
             synthetic=args.synthetic,
+        )
+
+    if args.dataset in ["mmpd", "both"]:
+        mmpd_dir = args.data_dir if (args.data_dir and args.dataset == "mmpd") else "data/MMPD"
+        evaluate_mmpd(
+            data_dir=mmpd_dir,
+            output_dir=args.output_dir,
+            max_subjects=args.max_subjects,
+            max_frames=args.max_frames,
         )
 
 
