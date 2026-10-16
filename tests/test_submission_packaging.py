@@ -135,3 +135,39 @@ def test_submission_bundle_with_bvp_and_valid_loa(tmp_path):
     assert len(df) == n
     np.testing.assert_allclose(df["bvp_signal"].values, np.round(bvp_sig, 5), atol=1e-5)
 
+
+def test_submission_bundle_consistency_check(tmp_path):
+    from scripts.package_submission import verify_submission_bundle_consistency
+    sub_dir = str(tmp_path / "Round1_Baseline_Consistency")
+    dummy_vid = str(tmp_path / "dummy.mp4")
+    dummy_csv = str(tmp_path / "dummy_gt.csv")
+
+    n = 30
+    t = np.arange(n) / 30.0
+    ref_hr = np.round(75.0 + 3.0 * np.sin(2 * np.pi * 0.1 * t), 2)
+    est_hr = np.round(75.0 + 2.8 * np.sin(2 * np.pi * 0.1 * t), 2)
+
+    with open(dummy_vid, "wb") as f:
+        f.write(b"dummy video data")
+    df_gt = pd.DataFrame({"timestamp_sec": np.round(t, 4), "ground_truth_hr_bpm": ref_hr})
+    df_gt.to_csv(dummy_csv, index=False)
+
+    from evaluation.metrics import compute_all_metrics
+    metrics = compute_all_metrics(est_hr, ref_hr)
+    params = {"resolution": "1280x720", "fps": 30.0, "lux": 300.0, "fitzpatrick_type": "Type III"}
+
+    export_submission_bundle(
+        output_dir=sub_dir,
+        video_path=dummy_vid,
+        gt_csv_path=dummy_csv,
+        facial_frames=np.zeros((n, 20, 20, 3), dtype=np.uint8),
+        roi_masks=np.ones((n, 20, 20), dtype=np.uint8),
+        reference_hr_series=ref_hr,
+        estimated_hr_series=est_hr,
+        metrics=metrics,
+        params=params,
+    )
+
+    verify_submission_bundle_consistency(sub_dir)
+
+

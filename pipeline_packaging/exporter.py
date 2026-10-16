@@ -197,11 +197,23 @@ def export_submission_bundle(
 
     # 5. processed_output.csv
     proc_csv_dest = os.path.join(output_dir, "processed_output.csv")
-    timestamps = np.arange(len(estimated_hr_series)) / float(params.get("fps", 30.0))
+    t_len = len(estimated_hr_series)
+    timestamps = None
+    if os.path.exists(gt_csv_path):
+        try:
+            df_ref_in = pd.read_csv(gt_csv_path)
+            if "timestamp_sec" in df_ref_in.columns and len(df_ref_in) == t_len:
+                timestamps = df_ref_in["timestamp_sec"].values
+        except Exception:
+            timestamps = None
+
+    if timestamps is None:
+        timestamps = np.round(np.arange(t_len) / float(params.get("fps", 30.0)), 4)
+
     bvp_to_save = bvp_signal if bvp_signal is not None else estimated_hr_series
 
     df_out = pd.DataFrame({
-        "timestamp_sec": np.round(timestamps, 4),
+        "timestamp_sec": timestamps,
         "estimated_hr_bpm": np.round(estimated_hr_series, 2),
         "bvp_signal": np.round(bvp_to_save, 5),
     })

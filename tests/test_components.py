@@ -234,3 +234,151 @@ def test_bitrate_compression_c5():
     assert compressed.shape == frames.shape
     assert compressed.dtype == np.uint8
 
+
+def test_pairwise_defection_and_diagnostic_cases():
+    """Verify Pairwise CHROM ∧ BeatFormer defection, harmonic exclusion guard, and BVP CZT peak consistency."""
+    from unittest.mock import patch
+    from models.hybrid.hybrid_system import HybridRPPGSystem
+
+    hyb = HybridRPPGSystem(fs=30.0, enable_pfd=False, enable_czt=True, enable_beatformer=True)
+    crops = np.zeros((450, 36, 36, 3), dtype=np.uint8)
+    rgb = np.zeros((450, 3), dtype=np.float64)
+
+    freqs = np.linspace(42, 180, 512)
+    sigma = 1.5
+    t = np.arange(450) / 30.0
+    freqs_bf = hyb.beatformer.czt.freq_axis.cpu().numpy() * 60.0
+
+    # -------------------------------------------------------------------------
+    # Case 1: subject32 @ 300 lx signature (POS subharmonic veto overcome)
+    # -------------------------------------------------------------------------
+    bvp_bf_1 = np.sin(2 * np.pi * (88.72 / 60.0) * t)
+    bvp_me_1 = np.sin(2 * np.pi * (75.08 / 60.0) * t)
+    psd_bf_1 = np.exp(-0.5 * ((freqs_bf - 88.72) / sigma)**2)
+
+    with patch.object(hyb.backbone, 'process_frames', return_value={
+        'bvp': bvp_me_1, 'hr_bpm': 75.08, 'hr_series': np.full(450, 75.08)
+    }), patch.object(hyb.czt, 'estimate_hr', side_effect=[
+        (75.08, freqs, np.exp(-0.5 * ((freqs - 75.08) / sigma)**2)),  # raw ME
+        (89.87, 0.0, np.exp(-0.5 * ((freqs - 89.87) / sigma)**2)),    # CHROM
+        (44.41, 0.0, np.exp(-0.5 * ((freqs - 44.41) / sigma)**2)),    # POS
+    ]), patch.object(hyb.beatformer, 'estimate_hr_from_trace', return_value=(
+        88.72, bvp_bf_1, psd_bf_1
+    )):
+        res1 = hyb.process(crops, rgb_signals=rgb)
+        log1 = res1['decision_log']
+        assert log1['defection_fired'] is True
+        assert log1['pairwise_agree'] is True
+        assert log1['anchor_isolated'] is True
+        assert res1['hr_bpm'] == pytest.approx(88.10, abs=0.5)
+
+        # Edit 2: Shipped BVP CZT peak must agree with final_hr
+        czt = CZTHRTransformer(fs=30.0, low_hz=0.7, high_hz=3.0, num_bins=512)
+        bvp_peak1 = czt.estimate_hr(res1['processed_signal'])
+        assert abs(bvp_peak1 - res1['hr_bpm']) <= 1.5, f"BVP peak ({bvp_peak1}) disagrees with final HR ({res1['hr_bpm']})"
+
+    # -------------------------------------------------------------------------
+    # Case 2: subject3 @ 300 lx signature (Mechanism check on dual-peak ambiguity)
+    # -------------------------------------------------------------------------
+    bvp_bf_2 = np.sin(2 * np.pi * (101.68 / 60.0) * t)
+    bvp_me_2 = np.sin(2 * np.pi * (82.00 / 60.0) * t)
+    psd_bf_2 = np.exp(-0.5 * ((freqs_bf - 101.68) / sigma)**2)
+
+    with patch.object(hyb.backbone, 'process_frames', return_value={
+        'bvp': bvp_me_2, 'hr_bpm': 82.00, 'hr_series': np.full(450, 82.00)
+    }), patch.object(hyb.czt, 'estimate_hr', side_effect=[
+        (82.00, freqs, np.exp(-0.5 * ((freqs - 82.00) / sigma)**2)),
+        (105.20, 0.0, np.exp(-0.5 * ((freqs - 105.20) / sigma)**2)),
+        (104.84, 0.0, np.exp(-0.5 * ((freqs - 104.84) / sigma)**2)),
+    ]), patch.object(hyb.beatformer, 'estimate_hr_from_trace', return_value=(
+        101.68, bvp_bf_2, psd_bf_2
+    )):
+        res2 = hyb.process(crops, rgb_signals=rgb)
+        assert res2['decision_log']['defection_fired'] is True
+        assert res2['hr_bpm'] == pytest.approx(102.00, abs=1.0)
+
+    # -------------------------------------------------------------------------
+    # Case 3: subject3 @ 50 lx signature (Secondary dispersion, anchor protected)
+    # -------------------------------------------------------------------------
+    bvp_bf_3 = np.sin(2 * np.pi * (68.20 / 60.0) * t)
+    bvp_me_3 = np.sin(2 * np.pi * (98.96 / 60.0) * t)
+    psd_bf_3 = np.exp(-0.5 * ((freqs_bf - 68.20) / sigma)**2)
+
+    with patch.object(hyb.backbone, 'process_frames', return_value={
+        'bvp': bvp_me_3, 'hr_bpm': 98.96, 'hr_series': np.full(450, 98.96)
+    }), patch.object(hyb.czt, 'estimate_hr', side_effect=[
+        (98.96, freqs, np.exp(-0.5 * ((freqs - 98.96) / sigma)**2)),
+        (74.39, 0.0, np.exp(-0.5 * ((freqs - 74.39) / sigma)**2)),
+        (73.68, 0.0, np.exp(-0.5 * ((freqs - 73.68) / sigma)**2)),
+    ]), patch.object(hyb.beatformer, 'estimate_hr_from_trace', return_value=(
+        68.20, bvp_bf_3, psd_bf_3
+    )):
+        res3 = hyb.process(crops, rgb_signals=rgb)
+        assert res3['decision_log']['defection_fired'] is False
+        assert abs(res3['hr_bpm'] - 98.96) < 1.0
+
+    # -------------------------------------------------------------------------
+    # Case 4: subject32 @ 50 lx signature (Anchor not far, co-located consensus)
+    # -------------------------------------------------------------------------
+    bvp_bf_4 = np.sin(2 * np.pi * (75.49 / 60.0) * t)
+    bvp_me_4 = np.sin(2 * np.pi * (77.69 / 60.0) * t)
+    psd_bf_4 = np.exp(-0.5 * ((freqs_bf - 75.49) / sigma)**2)
+
+    with patch.object(hyb.backbone, 'process_frames', return_value={
+        'bvp': bvp_me_4, 'hr_bpm': 77.69, 'hr_series': np.full(450, 77.69)
+    }), patch.object(hyb.czt, 'estimate_hr', side_effect=[
+        (77.69, freqs, np.exp(-0.5 * ((freqs - 77.69) / sigma)**2)),
+        (76.37, 0.0, np.exp(-0.5 * ((freqs - 76.37) / sigma)**2)),
+        (77.19, 0.0, np.exp(-0.5 * ((freqs - 77.19) / sigma)**2)),
+    ]), patch.object(hyb.beatformer, 'estimate_hr_from_trace', return_value=(
+        75.49, bvp_bf_4, psd_bf_4
+    )):
+        res4 = hyb.process(crops, rgb_signals=rgb)
+        assert res4['decision_log']['defection_fired'] is False
+        assert abs(res4['hr_bpm'] - 77.69) < 2.0
+
+    # -------------------------------------------------------------------------
+    # Case 5: Harmonic exclusion guard (1/2 and 3/2 ratios rejected)
+    # -------------------------------------------------------------------------
+    for harm_chr, harm_bf in [(40.2, 39.8), (120.1, 119.9)]:
+        bvp_bf_h = np.sin(2 * np.pi * (harm_bf / 60.0) * t)
+        bvp_me_h = np.sin(2 * np.pi * (80.00 / 60.0) * t)
+        psd_bf_h = np.exp(-0.5 * ((freqs_bf - harm_bf) / sigma)**2)
+
+        with patch.object(hyb.backbone, 'process_frames', return_value={
+            'bvp': bvp_me_h, 'hr_bpm': 80.00, 'hr_series': np.full(450, 80.00)
+        }), patch.object(hyb.czt, 'estimate_hr', side_effect=[
+            (80.00, freqs, np.exp(-0.5 * ((freqs - 80.00) / sigma)**2)),
+            (harm_chr, 0.0, np.exp(-0.5 * ((freqs - harm_chr) / sigma)**2)),
+            (80.00, 0.0, np.exp(-0.5 * ((freqs - 80.00) / sigma)**2)),
+        ]), patch.object(hyb.beatformer, 'estimate_hr_from_trace', return_value=(
+            harm_bf, bvp_bf_h, psd_bf_h
+        )):
+            res5 = hyb.process(crops, rgb_signals=rgb)
+            assert res5['decision_log']['defection_fired'] is False
+            assert "harmonic_of_anchor" in res5['decision_log']['defection_reason']
+
+    # -------------------------------------------------------------------------
+    # Case 6: subject15 @ 300 lx signature (POS confirms anchor, defection blocked)
+    # -------------------------------------------------------------------------
+    bvp_bf_6 = np.sin(2 * np.pi * (72.50 / 60.0) * t)
+    bvp_me_6 = np.sin(2 * np.pi * (121.80 / 60.0) * t)
+    psd_bf_6 = np.exp(-0.5 * ((freqs_bf - 72.50) / sigma)**2)
+
+    with patch.object(hyb.backbone, 'process_frames', return_value={
+        'bvp': bvp_me_6, 'hr_bpm': 121.80, 'hr_series': np.full(450, 121.80)
+    }), patch.object(hyb.czt, 'estimate_hr', side_effect=[
+        (121.80, freqs, np.exp(-0.5 * ((freqs - 121.80) / sigma)**2)),
+        (72.00, 0.0, np.exp(-0.5 * ((freqs - 72.00) / sigma)**2)),
+        (120.92, 0.0, np.exp(-0.5 * ((freqs - 120.92) / sigma)**2)),
+    ]), patch.object(hyb.beatformer, 'estimate_hr_from_trace', return_value=(
+        72.50, bvp_bf_6, psd_bf_6
+    )):
+        res6 = hyb.process(crops, rgb_signals=rgb)
+        assert res6['decision_log']['defection_fired'] is False
+        assert res6['decision_log']['pos_confirms_anchor'] is True
+        assert "pos_confirms_anchor" in res6['decision_log']['defection_reason']
+        assert abs(res6['hr_bpm'] - 121.80) < 1.0
+
+
+

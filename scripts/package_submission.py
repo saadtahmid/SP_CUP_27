@@ -17,6 +17,7 @@ import argparse
 import cv2
 import numpy as np
 import pandas as pd
+from scipy import io as spio
 
 from datasets.synthetic_generator import generate_synthetic_rppg_video
 from datasets.ubfc_loader import UBFCDataLoader
@@ -153,6 +154,10 @@ def main():
     print(f"Skin Tone Analysis: {skin_info}")
     print(f"Global Estimated HR: {global_hr:.2f} BPM")
 
+    # Round series to 2 decimals for exact CSV and .mat numerical parity
+    reference_hr_series = np.round(reference_hr_series, 2)
+    estimated_hr_series = np.round(estimated_hr_series, 2)
+
     metrics = compute_all_metrics(estimated_hr_series, reference_hr_series)
     print("Computed Submission Metrics:")
     for k, v in metrics.items():
@@ -160,7 +165,7 @@ def main():
 
     params = {
         "resolution": "1280x720",
-        "fps": 30.0,
+        "fps": float(fps),
         "lux": 300.0,
         "camera_distance_cm": 50.0,
         "fitzpatrick_type": skin_info["fitzpatrick_type"],
@@ -185,6 +190,65 @@ def main():
     print("\nSubmission Bundle Successfully Created:")
     for k, v in bundle_status.items():
         print(f"  {k}: {v}")
+
+    verify_submission_bundle_consistency(output_dir)
+
+
+def verify_submission_bundle_consistency(submission_dir: str):
+    ref_csv = os.path.join(submission_dir, "reference_signal.csv")
+    proc_csv = os.path.join(submission_dir, "processed_output.csv")
+    mat_file = os.path.join(submission_dir, "Round1_Baseline_None.mat")
+
+    assert os.path.exists(ref_csv), f"Missing {ref_csv}"
+    assert os.path.exists(proc_csv), f"Missing {proc_csv}"
+    assert os.path.exists(mat_file), f"Missing {mat_file}"
+
+    df_ref = pd.read_csv(ref_csv)
+    df_proc = pd.read_csv(proc_csv)
+
+    # 1. Timestamps match bit-for-bit (atol=1e-9)
+    assert len(df_ref) == len(df_proc), f"Length mismatch: ref {len(df_ref)} vs proc {len(df_proc)}"
+    np.testing.assert_allclose(
+        df_ref["timestamp_sec"].values.astype(np.float64),
+        df_proc["timestamp_sec"].values.astype(np.float64),
+        atol=1e-9,
+        err_msg="Timestamp grid mismatch between reference_signal.csv and processed_output.csv",
+    )
+
+    # 2. Recompute metrics directly from exported CSVs
+    ref_hr = df_ref["ground_truth_hr_bpm"].values.astype(np.float64)
+    proc_hr = df_proc["estimated_hr_bpm"].values.astype(np.float64)
+    csv_metrics = compute_all_metrics(proc_hr, ref_hr)
+
+    # 3. Load .mat and extract metrics struct with tolerant extraction
+    mat_data = spio.loadmat(mat_file, squeeze_me=True)
+    mat_m = mat_data["metrics"]
+
+    def get_val(container, key):
+        if hasattr(container, "dtype") and container.dtype.names and key in container.dtype.names:
+            v = container[key]
+        elif isinstance(container, dict) and key in container:
+            v = container[key]
+        else:
+            raise KeyError(f"Key {key} not found in .mat metrics struct")
+        return float(np.asarray(v).ravel()[0])
+
+    print("\n--- Auditing Shipped Submission Bundle Consistency ---")
+    for k in ["mae", "rmse", "pearson_r", "bias"]:
+        val_csv = csv_metrics[k]
+        val_mat = get_val(mat_m, k)
+        print(f"  Metric {k}: CSV={val_csv:.4f}, MAT={val_mat:.4f}, diff={abs(val_csv - val_mat):.6f}")
+        assert abs(val_csv - val_mat) < 0.01, f"Metric {k} diverged: CSV={val_csv} vs MAT={val_mat}"
+
+    val_csv_upper = csv_metrics.get("loa_upper", csv_metrics.get("upper_loa"))
+    val_mat_upper = get_val(mat_m, "upper_loa")
+    assert abs(val_csv_upper - val_mat_upper) < 0.01, f"Upper LOA diverged: CSV={val_csv_upper} vs MAT={val_mat_upper}"
+
+    val_csv_lower = csv_metrics.get("loa_lower", csv_metrics.get("lower_loa"))
+    val_mat_lower = get_val(mat_m, "lower_loa")
+    assert abs(val_csv_lower - val_mat_lower) < 0.01, f"Lower LOA diverged: CSV={val_csv_lower} vs MAT={val_mat_lower}"
+
+    print("  [PASSED] Shipped CSV metrics match .mat struct bit-for-bit within tolerance.")
 
 
 if __name__ == "__main__":

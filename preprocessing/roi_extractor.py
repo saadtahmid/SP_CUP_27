@@ -173,16 +173,27 @@ class ROIExtractor:
         target_crop_size: Tuple[int, int] = (36, 36),
         bbox_ema_alpha: float = 0.15,
         crop_margin: float = 1.25,
+        iou_relock_threshold: float = 0.75,
     ):
         self.tracker = FaceMeshTracker()
         self.crop_size = target_crop_size
         self.bbox_ema_alpha = bbox_ema_alpha
         self.crop_margin = crop_margin
+        self.iou_relock_threshold = iou_relock_threshold
+        self.luminance_floor = 35.0
         self._locked_bbox: Optional[np.ndarray] = None
+        self._ema_bbox: Optional[np.ndarray] = None
+        self.low_iou_frames: int = 0
+        self.high_iou_frames: int = 0
+        self.is_tracking_dynamic: bool = False
 
     def reset(self):
-        """Reset locked bounding box state."""
+        """Reset locked bounding box and tracking hysteresis state."""
         self._locked_bbox = None
+        self._ema_bbox = None
+        self.low_iou_frames = 0
+        self.high_iou_frames = 0
+        self.is_tracking_dynamic = False
 
     def extract_from_frame(
         self,
@@ -192,16 +203,75 @@ class ROIExtractor:
     ) -> Dict[str, any]:
         """Extract R4 sub-ROI RGB means and 36x36 face crop from a single frame."""
         h, w = frame_bgr.shape[:2]
-        if self._locked_bbox is None:
-            mean_val = float(np.mean(frame_bgr))
-            if 0.5 < mean_val < 40.0:
-                det_frame = np.clip(frame_bgr.astype(np.float32) * (120.0 / mean_val), 0, 255).astype(np.uint8)
-            else:
-                det_frame = frame_bgr
-            res = self.tracker.process_frame(det_frame)
-            self._locked_bbox = res["bbox"].copy()
+        mean_val = float(np.mean(frame_bgr))
+        if 0.5 < mean_val < 40.0:
+            det_frame = np.clip(frame_bgr.astype(np.float32) * (120.0 / mean_val), 0, 255).astype(np.uint8)
+        else:
+            det_frame = frame_bgr
 
-        x1, y1, x2, y2 = [int(v) for v in self._locked_bbox]
+        if self._locked_bbox is None:
+            res = self.tracker.process_frame(det_frame)
+            self._locked_bbox = res["bbox"].astype(np.float64)
+            self._ema_bbox = self._locked_bbox.copy()
+            active_bbox = self._locked_bbox
+            tracking_mode = "LOCKED"
+            self.is_tracking_dynamic = False
+            self.low_iou_frames = 0
+            self.high_iou_frames = 0
+        else:
+            res = self.tracker.process_frame(det_frame)
+            if res.get("landmarks") is not None:
+                b_det = res["bbox"].astype(np.float64)
+                # Correction 1: Always warm the EMA state on detector output even in LOCKED mode
+                self._ema_bbox = self.bbox_ema_alpha * b_det + (1.0 - self.bbox_ema_alpha) * self._ema_bbox
+
+                # Compute IoU between detected face and Frame-0 anchor
+                b0 = self._locked_bbox
+                ix1, iy1 = max(b0[0], b_det[0]), max(b0[1], b_det[1])
+                ix2, iy2 = min(b0[2], b_det[2]), min(b0[3], b_det[3])
+                inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+                a0 = max(0.0, b0[2] - b0[0]) * max(0.0, b0[3] - b0[1])
+                adet = max(0.0, b_det[2] - b_det[0]) * max(0.0, b_det[3] - b_det[1])
+                union = a0 + adet - inter
+                iou = inter / float(union) if union > 0 else 0.0
+
+                if mean_val < self.luminance_floor:
+                    # Low-light luminance floor: detector uncertainty dominates; hold Frame-0 anchor lock
+                    self.is_tracking_dynamic = False
+                    self.low_iou_frames = 0
+                    self.high_iou_frames = 0
+                    active_bbox = self._locked_bbox
+                    tracking_mode = "LOCKED"
+                else:
+                    # Asymmetric hysteresis gate: 15 frames < 0.75 to activate, 15 frames >= 0.85 to re-lock
+                    if iou < self.iou_relock_threshold:
+                        self.low_iou_frames += 1
+                        self.high_iou_frames = 0
+                        if self.low_iou_frames >= 15:
+                            self.is_tracking_dynamic = True
+                    else:
+                        self.high_iou_frames += 1
+                        self.low_iou_frames = 0
+                        if iou >= 0.85 and self.high_iou_frames >= 15:
+                            self.is_tracking_dynamic = False
+                            # Re-anchor to warm EMA location
+                            self._locked_bbox = self._ema_bbox.copy()
+
+                    if self.is_tracking_dynamic:
+                        active_bbox = self._ema_bbox
+                        tracking_mode = "DYNAMIC_EMA"
+                    else:
+                        active_bbox = self._locked_bbox
+                        tracking_mode = "LOCKED"
+            else:
+                if self.is_tracking_dynamic:
+                    active_bbox = self._ema_bbox
+                    tracking_mode = "DYNAMIC_EMA"
+                else:
+                    active_bbox = self._locked_bbox
+                    tracking_mode = "LOCKED"
+
+        x1, y1, x2, y2 = [int(round(v)) for v in active_bbox]
         bw = max(1, x2 - x1)
         bh = max(1, y2 - y1)
 
@@ -274,7 +344,7 @@ class ROIExtractor:
             "mean_rgb": mean_rgb,
             "roi_mask": roi_mask,
             "face_crop_36x36": face_rgb_norm,
-            "bbox": self._locked_bbox.copy(),
+            "bbox": active_bbox.copy(),
             "skin_pixels": filt_comb_pix if len(filt_comb_pix) > 0 else fh_rgb,
             "sub_rois": {
                 "forehead": fh_mean,
@@ -287,6 +357,7 @@ class ROIExtractor:
                 "right_cheek": float(rc_ratio),
             },
             "has_lower_mask": has_lower_mask or mask_occlusion_active,
+            "tracking_mode": tracking_mode,
         }
 
     def process_video(
@@ -329,6 +400,7 @@ class ROIExtractor:
         roi_masks = np.zeros((t_len, frames.shape[1], frames.shape[2]), dtype=np.uint8)
         all_skin_pixels = []
         mask_frames_count = 0
+        tracking_modes = []
 
         for t in range(t_len):
             do_skin = (t % 10 == 0)
@@ -340,6 +412,7 @@ class ROIExtractor:
             rgb_signals[t] = out["mean_rgb"]
             cropped_faces[t] = out["face_crop_36x36"]
             roi_masks[t] = out["roi_mask"]
+            tracking_modes.append(out.get("tracking_mode", "LOCKED"))
             if out.get("has_lower_mask", False):
                 mask_frames_count += 1
             for k in sub_roi_rgb:
@@ -368,6 +441,9 @@ class ROIExtractor:
         else:
             sub_roi_weights = {"forehead": 0.25, "left_cheek": 0.375, "right_cheek": 0.375}
 
+        locked_cnt = sum(1 for m in tracking_modes if m == "LOCKED")
+        dynamic_cnt = sum(1 for m in tracking_modes if m == "DYNAMIC_EMA")
+
         return {
             "rgb_signals": rgb_signals,
             "cropped_faces": cropped_faces,
@@ -377,6 +453,13 @@ class ROIExtractor:
             "sub_roi_rgb": sub_roi_rgb,
             "sub_roi_weights": sub_roi_weights,
             "sub_roi_skin_ratios": mean_skin_ratios,
+            "tracking_modes": tracking_modes,
+            "tracking_summary": {
+                "locked_frames": locked_cnt,
+                "dynamic_frames": dynamic_cnt,
+                "locked_pct": round(100.0 * locked_cnt / max(1, t_len), 2),
+                "dynamic_pct": round(100.0 * dynamic_cnt / max(1, t_len), 2),
+            },
         }
 
     def close(self):
