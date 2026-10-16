@@ -1,0 +1,14 @@
+cohort,dimension,condition,count,pos_mae,chrom_mae,me_mae,hybrid_mae,hybrid_medae,hybrid_rmse,hybrid_pearson_r
+Operational,Skin Tone,Fitzpatrick III,16,15.204,13.795,14.455,9.447,4.819,14.14,-0.1655
+Operational,Skin Tone,Fitzpatrick IV,16,42.466,22.814,18.923,22.598,20.684,26.256,0.0642
+Operational,Skin Tone,Fitzpatrick V,16,27.088,20.331,19.204,19.398,17.76,24.375,0.0494
+Operational,Skin Tone,Fitzpatrick VI,16,28.662,19.964,11.127,12.532,6.917,18.729,-0.1213
+Operational,Lighting,Incandescent,16,25.944,20.228,19.303,20.343,20.653,24.935,-0.1159
+Operational,Lighting,LED-high,16,25.601,21.001,14.182,15.037,8.057,23.048,0.0718
+Operational,Lighting,LED-low,16,28.312,20.57,17.543,17.083,16.221,20.332,-0.1602
+Operational,Lighting,Nature,16,33.562,15.105,12.68,11.513,7.769,16.366,0.5385
+Operational,Motion,Rotation,16,22.576,19.204,11.432,11.748,6.692,16.582,0.1538
+Operational,Motion,Stationary,16,21.016,14.274,13.941,14.023,14.88,17.52,-0.0956
+Operational,Motion,Talking,16,25.506,16.992,13.136,12.946,11.529,17.068,0.3384
+Operational,Motion,Walking,16,44.321,26.434,25.199,25.258,23.813,31.0,-0.0021
+Operational,Pooled,All 64 Operational Trials,64,28.355,19.226,15.927,15.994,14.068,21.414,0.0984

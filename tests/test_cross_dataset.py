@@ -11,7 +11,7 @@ import pytest
 
 from datasets.pure_loader import PUREDataLoader, PURE_PROTOCOLS
 from datasets.mmpd_loader import MMPDDataLoader
-from scripts.run_cross_dataset import evaluate_pure, generate_synthetic_pure_session
+from scripts.run_cross_dataset import evaluate_pure, evaluate_mmpd, generate_synthetic_pure_session
 
 
 @pytest.fixture
@@ -134,3 +134,41 @@ def test_run_cross_dataset_pure_execution(mock_pure_dir, tmp_path):
     assert "chrom_error_bpm" in df.columns
     assert (Path(out_dir) / "pure_results.csv").exists()
     assert (Path(out_dir) / "pure_protocol_summary.csv").exists()
+
+
+def test_run_cross_dataset_mmpd_execution(mock_mmpd_dir, tmp_path):
+    """Verify end-to-end execution of MMPD benchmark on mock data without overwriting real artifacts."""
+    out_dir = str(tmp_path / "mock_mmpd_artifacts")
+    df = evaluate_mmpd(data_dir=str(mock_mmpd_dir), output_dir=out_dir, max_subjects=1, max_frames=15)
+    assert isinstance(df, object)
+    assert len(df) > 0
+    assert "hybrid_v4_bpm" in df.columns
+    assert "pos_error_bpm" in df.columns
+    assert "chrom_error_bpm" in df.columns
+    assert "me_error_bpm" in df.columns
+    assert (Path(out_dir) / "mmpd_results.csv").exists()
+    assert (Path(out_dir) / "mmpd_summary.csv").exists()
+
+
+def test_hardened_anchor_defection_guard():
+    """Verify that broadband noise cannot trigger anchor defection even if secondary branches agree."""
+    from models.hybrid.hybrid_system import HybridRPPGSystem
+
+    hyb = HybridRPPGSystem(fs=30.0, enable_pfd=False, enable_czt=True, enable_beatformer=True)
+    # Create synthetic crops with a clear 75 BPM pulse
+    t = np.linspace(0, 15, 450)
+    pulse = (np.sin(2 * np.pi * (75.0 / 60.0) * t) * 10 + 128).astype(np.uint8)
+    crops = np.zeros((450, 36, 36, 3), dtype=np.uint8)
+    for c in range(3):
+        crops[:, :, :, c] = pulse[:, None, None]
+
+    # Create broadband noise RGB signals where secondary branches lack spectral concentration
+    np.random.seed(42)
+    noise_rgb = np.random.normal(128.0, 15.0, (450, 3))
+
+    out = hyb.process(crops, rgb_signals=noise_rgb)
+    # The hybrid should remain locked on the anchor (~75 BPM) and refuse to defect to noise
+    assert abs(out["hr_bpm"] - out["hr_anchor_bpm"]) <= 1.0, (
+        f"Hybrid should track anchor {out['hr_anchor_bpm']:.2f}, got {out['hr_bpm']:.2f}"
+    )
+

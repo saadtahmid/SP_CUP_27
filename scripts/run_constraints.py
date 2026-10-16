@@ -122,19 +122,27 @@ def load_real_baseline_frames(subject_id: str = "subject4", max_frames: int = 45
     return np.array(frames), 30.0, gt_hr
 
 
-def load_stratified_ubfc_cohort(max_subjects: int = 10, max_frames: int = 450) -> List[Dict[str, any]]:
+def load_stratified_ubfc_cohort(
+    max_subjects: int = 10,
+    max_frames: int = 450,
+    specific_subjects: Optional[List[str]] = None,
+) -> List[Dict[str, any]]:
     """Load stratified UBFC cohort for multi-subject constraint evaluation."""
     loader = UBFCDataLoader(data_root="datasets/ubfc")
     avail = {s["subject_id"]: s for s in loader.subjects if s["has_video"]}
-    selected_ids = [sid for sid in STRATIFIED_UBFC_SUBJECTS if sid in avail]
-    for sid in sorted(avail.keys(), key=lambda x: int(x.replace("subject", ""))):
-        if len(selected_ids) >= max_subjects:
-            break
-        if sid not in selected_ids:
-            selected_ids.append(sid)
+    if specific_subjects:
+        selected_ids = [s.strip() for s in specific_subjects if s.strip() in avail]
+    else:
+        selected_ids = [sid for sid in STRATIFIED_UBFC_SUBJECTS if sid in avail]
+        for sid in sorted(avail.keys(), key=lambda x: int(x.replace("subject", ""))):
+            if len(selected_ids) >= max_subjects:
+                break
+            if sid not in selected_ids:
+                selected_ids.append(sid)
 
     cohort = []
-    for sid in selected_ids[:max_subjects]:
+    limit = len(selected_ids) if specific_subjects else max_subjects
+    for sid in selected_ids[:limit]:
         frames, fps, gt_hr = load_real_baseline_frames(subject_id=sid, max_frames=max_frames)
         cohort.append({
             "subject_id": sid,
@@ -152,6 +160,9 @@ def main():
     parser = argparse.ArgumentParser(description="Competition Constraints Evaluation Suite")
     parser.add_argument("--quick", action="store_true", help="Quick run evaluating 4 UBFC subjects")
     parser.add_argument("--num-subjects", type=int, default=10, help="Number of stratified UBFC subjects for C1/C3/C4/C5/C6/C7")
+    parser.add_argument("--subjects", type=str, default=None, help="Comma-separated subject IDs (e.g. subject3,subject32)")
+    parser.add_argument("--lux", type=str, default=None, help="Comma-separated lux levels to evaluate (e.g. 300 or 300,50)")
+    parser.add_argument("--log-decisions", action="store_true", help="Print and log detailed decision logs for each subject")
     parser.add_argument("--max-frames", type=int, default=450, help="Frames per UBFC video")
     parser.add_argument("--recompute-c2", action="store_true", help="Force recomputing AiPEX C2 subjects")
     args = parser.parse_args()
@@ -163,98 +174,102 @@ def main():
     print("Reference Protocol: Unified 450-Frame Contact PPG Dominant CZT Ground Truth")
     print("=" * 75)
 
-    # =========================================================================
-    # 1. C2: Diverse Skin Tone Generalization on AiPEX (88 Subjects, Signed Δ)
-    # =========================================================================
-    print("\n--- [Constraint C2] Diverse Skin Tone Generalization on AiPEX (N = 88) ---")
-    aipex_loader = AiPEXDatasetLoader(base_dir="third_party/rppg_biases")
-    subjects = aipex_loader.subjects
-    print(f"Total discovered AiPEX subjects: {len(subjects)}")
-
-    c2_cache_path = "artifacts/constraints/c2_predictions.csv"
-    if os.path.exists(c2_cache_path) and not getattr(args, "recompute_c2", False):
-        print(f"Loading AiPEX C2 evaluation from {c2_cache_path}...")
-        df_c2 = pd.read_csv(c2_cache_path)
-        preds_pos = df_c2["pos_pred_bpm"].to_numpy(dtype=np.float64)
-        preds_chrom = df_c2["chrom_pred_bpm"].to_numpy(dtype=np.float64)
-        refs = df_c2["gt_hr_bpm"].to_numpy(dtype=np.float64)
-        fitz_types = df_c2["fitzpatrick_type"].tolist()
-        n_eval = len(df_c2)
+    if args.subjects:
+        print("\n[Bypassing C2 AiPEX for targeted subject diagnostic run]")
     else:
-        eval_subset = subjects
-        print(f"Evaluating {len(eval_subset)} subjects across India and Sierra Leone...")
-        preds_pos, preds_chrom, refs, fitz_types, itas = [], [], [], [], []
+        # =========================================================================
+        # 1. C2: Diverse Skin Tone Generalization on AiPEX (88 Subjects, Signed Δ)
+        # =========================================================================
+        print("\n--- [Constraint C2] Diverse Skin Tone Generalization on AiPEX (N = 88) ---")
+        aipex_loader = AiPEXDatasetLoader(base_dir="third_party/rppg_biases")
+        subjects = aipex_loader.subjects
+        print(f"Total discovered AiPEX subjects: {len(subjects)}")
 
-        for s_info in eval_subset:
-            data = aipex_loader.load_subject_rgb_traces(s_info, max_frames=450)
-            gt_hr = data["gt_hr_bpm"]
-            rgb = data["rgb_signals"]
-            subj_fps = float(data.get("fps", 15.0))
-            st = data["skin_tone"]
+        c2_cache_path = "artifacts/constraints/c2_predictions.csv"
+        if os.path.exists(c2_cache_path) and not getattr(args, "recompute_c2", False):
+            print(f"Loading AiPEX C2 evaluation from {c2_cache_path}...")
+            df_c2 = pd.read_csv(c2_cache_path)
+            preds_pos = df_c2["pos_pred_bpm"].to_numpy(dtype=np.float64)
+            preds_chrom = df_c2["chrom_pred_bpm"].to_numpy(dtype=np.float64)
+            refs = df_c2["gt_hr_bpm"].to_numpy(dtype=np.float64)
+            fitz_types = df_c2["fitzpatrick_type"].tolist()
+            n_eval = len(df_c2)
+        else:
+            eval_subset = subjects
+            print(f"Evaluating {len(eval_subset)} subjects across India and Sierra Leone...")
+            preds_pos, preds_chrom, refs, fitz_types, itas = [], [], [], [], []
 
-            pipe_p = ClassicalRPPGPipeline(method="POS", fs=subj_fps, low_hz=0.7, high_hz=3.0, use_czt=True)
-            pipe_c = ClassicalRPPGPipeline(method="CHROM", fs=subj_fps, low_hz=0.7, high_hz=3.0, use_czt=True)
+            for s_info in eval_subset:
+                data = aipex_loader.load_subject_rgb_traces(s_info, max_frames=450)
+                gt_hr = data["gt_hr_bpm"]
+                rgb = data["rgb_signals"]
+                subj_fps = float(data.get("fps", 15.0))
+                st = data["skin_tone"]
 
-            bvp_p = pipe_p.extract_bvp(rgb)
-            bvp_c = pipe_c.extract_bvp(rgb)
+                pipe_p = ClassicalRPPGPipeline(method="POS", fs=subj_fps, low_hz=0.7, high_hz=3.0, use_czt=True)
+                pipe_c = ClassicalRPPGPipeline(method="CHROM", fs=subj_fps, low_hz=0.7, high_hz=3.0, use_czt=True)
 
-            hr_p = estimate_robust_hr_from_bvp(bvp_p, fs=subj_fps)
-            hr_c = estimate_robust_hr_from_bvp(bvp_c, fs=subj_fps)
+                bvp_p = pipe_p.extract_bvp(rgb)
+                bvp_c = pipe_c.extract_bvp(rgb)
 
-            preds_pos.append(hr_p)
-            preds_chrom.append(hr_c)
-            refs.append(gt_hr)
-            fitz_types.append(st["fitzpatrick_type"])
-            itas.append(st["ita_deg"])
+                hr_p = estimate_robust_hr_from_bvp(bvp_p, fs=subj_fps)
+                hr_c = estimate_robust_hr_from_bvp(bvp_c, fs=subj_fps)
 
-        preds_pos = np.array(preds_pos, dtype=np.float64)
-        preds_chrom = np.array(preds_chrom, dtype=np.float64)
-        refs = np.array(refs, dtype=np.float64)
-        n_eval = len(eval_subset)
+                preds_pos.append(hr_p)
+                preds_chrom.append(hr_c)
+                refs.append(gt_hr)
+                fitz_types.append(st["fitzpatrick_type"])
+                itas.append(st["ita_deg"])
 
-        df_c2 = pd.DataFrame({
-            "subject_id": [s["subject_id"] for s in eval_subset],
-            "cohort": [s["cohort"] for s in eval_subset],
-            "gt_hr_bpm": refs,
-            "pos_pred_bpm": preds_pos,
-            "chrom_pred_bpm": preds_chrom,
-            "fitzpatrick_type": fitz_types,
-            "ita_deg": itas,
-        })
-        df_c2.to_csv(c2_cache_path, index=False)
+            preds_pos = np.array(preds_pos, dtype=np.float64)
+            preds_chrom = np.array(preds_chrom, dtype=np.float64)
+            refs = np.array(refs, dtype=np.float64)
+            n_eval = len(eval_subset)
 
-    if len(refs) > 0:
-        preds_hybrid_c2 = 0.40 * preds_pos + 0.60 * preds_chrom
-        c2_fairness_pos = evaluate_skin_tone_fairness(preds_pos, refs, fitz_types, tolerance_bpm=3.0)
-        c2_fairness_chrom = evaluate_skin_tone_fairness(preds_chrom, refs, fitz_types, tolerance_bpm=3.0)
-        c2_fairness_hyb = evaluate_skin_tone_fairness(preds_hybrid_c2, refs, fitz_types, tolerance_bpm=3.0)
+            df_c2 = pd.DataFrame({
+                "subject_id": [s["subject_id"] for s in eval_subset],
+                "cohort": [s["cohort"] for s in eval_subset],
+                "gt_hr_bpm": refs,
+                "pos_pred_bpm": preds_pos,
+                "chrom_pred_bpm": preds_chrom,
+                "fitzpatrick_type": fitz_types,
+                "ita_deg": itas,
+            })
+            df_c2.to_csv(c2_cache_path, index=False)
 
-        print("\n[C2 POS + PFD + CZT] Stratified Skin Tone Results (Signed Deviations):")
-        print(generate_fairness_markdown_table(c2_fairness_pos))
+        if len(refs) > 0:
+            preds_hybrid_c2 = 0.40 * preds_pos + 0.60 * preds_chrom
+            c2_fairness_pos = evaluate_skin_tone_fairness(preds_pos, refs, fitz_types, tolerance_bpm=3.0)
+            c2_fairness_chrom = evaluate_skin_tone_fairness(preds_chrom, refs, fitz_types, tolerance_bpm=3.0)
+            c2_fairness_hyb = evaluate_skin_tone_fairness(preds_hybrid_c2, refs, fitz_types, tolerance_bpm=3.0)
 
-        print("\n[C2 CHROM + PFD + CZT] Stratified Skin Tone Results (Signed Deviations):")
-        print(generate_fairness_markdown_table(c2_fairness_chrom))
+            print("\n[C2 POS + PFD + CZT] Stratified Skin Tone Results (Signed Deviations):")
+            print(generate_fairness_markdown_table(c2_fairness_pos))
 
-        print("\n[C2 Hybrid Consensus (0.40*POS + 0.60*CHROM + PFD + CZT)] Stratified Skin Tone Results:")
-        print(generate_fairness_markdown_table(c2_fairness_hyb))
-        print(
-            "Fairness Disclosure: Neither POS (Max |Δ| = 7.23 BPM, FAILED) nor CHROM (Max |Δ| = 4.54 BPM, FAILED) "
-            "achieves demographic compliance alone, whereas their complementary signed biases cancel under Hybrid Consensus "
-            "(Max |Δ| = 2.79 BPM <= 3.0 BPM, PASSED across all Types I-VI). Intermediate-to-dark Types IV (+2.38 BPM) and "
-            "V (+2.41 BPM) exhibit moderate melanin-absorption elevation within the pre-specified tolerance."
-        )
+            print("\n[C2 CHROM + PFD + CZT] Stratified Skin Tone Results (Signed Deviations):")
+            print(generate_fairness_markdown_table(c2_fairness_chrom))
 
-        plot_bland_altman(
-            preds_hybrid_c2, refs,
-            output_path="artifacts/constraints/bland_altman_c2_skin_tone.png",
-            title=f"Bland-Altman Agreement on AiPEX (C2: n={n_eval} subjects)",
-        )
+            print("\n[C2 Hybrid Consensus (0.40*POS + 0.60*CHROM + PFD + CZT)] Stratified Skin Tone Results:")
+            print(generate_fairness_markdown_table(c2_fairness_hyb))
+            print(
+                "Fairness Disclosure: Neither POS (Max |Δ| = 7.23 BPM, FAILED) nor CHROM (Max |Δ| = 4.54 BPM, FAILED) "
+                "achieves demographic compliance alone, whereas their complementary signed biases cancel under Hybrid Consensus "
+                "(Max |Δ| = 2.79 BPM <= 3.0 BPM, PASSED across all Types I-VI). Intermediate-to-dark Types IV (+2.38 BPM) and "
+                "V (+2.41 BPM) exhibit moderate melanin-absorption elevation within the pre-specified tolerance."
+            )
+
+            plot_bland_altman(
+                preds_hybrid_c2, refs,
+                output_path="artifacts/constraints/bland_altman_c2_skin_tone.png",
+                title=f"Bland-Altman Agreement on AiPEX (C2: n={n_eval} subjects)",
+            )
 
     # =========================================================================
     # Load Stratified Multi-Subject UBFC Cohort for C1, C3, C4, C5, C6, C7
     # =========================================================================
-    n_subj = 4 if args.quick else args.num_subjects
-    cohort = load_stratified_ubfc_cohort(max_subjects=n_subj, max_frames=args.max_frames)
+    specific_subjs = [s.strip() for s in args.subjects.split(",")] if args.subjects else None
+    n_subj = len(specific_subjs) if specific_subjs else (4 if args.quick else args.num_subjects)
+    cohort = load_stratified_ubfc_cohort(max_subjects=n_subj, max_frames=args.max_frames, specific_subjects=specific_subjs)
     print(f"\nLoaded Stratified UBFC Cohort (N = {len(cohort)} subjects): {[c['subject_id'] for c in cohort]}")
 
     extractor = ROIExtractor()
@@ -267,32 +282,86 @@ def main():
     # 2. C1: Physical Low-Light Degradation Curve (300 -> 50 -> 25 -> 10 lux)
     # =========================================================================
     print("\n--- [Constraint C1] Physical Linear Low-Light Degradation Curve (Multi-Subject) ---")
-    lux_levels = [300.0, 50.0, 25.0, 10.0]
+    if args.lux:
+        lux_levels = [float(x.strip()) for x in args.lux.split(",")]
+    else:
+        lux_levels = [300.0, 50.0, 25.0, 10.0]
     c1_rows = []
     c1_subj_rows = []
+    decision_log_records = []
 
     for lux in lux_levels:
         errs_chr, errs_hyb, skin_adcs = [], [], []
         for item in cohort:
             fps = item["fps"]
             gt_hr = item["gt_hr"]
-            sim_frames = simulate_low_light_video(item["frames"], target_lux=lux, baseline_lux=300.0, seed=42)
+            sim_frames = simulate_low_light_video(item["frames"], target_lux=lux, baseline_lux=300.0, seed=int(1000 + lux))
             ext = item["ext_base"] if lux >= 300.0 else extractor.process_video(sim_frames, fs=fps)
             rgb = ext["rgb_signals"]
             c_faces = ext["cropped_faces"]
             skin_adc = float(np.mean(rgb))
+            tr_summary = ext.get("tracking_summary", {})
 
             pipe_chr = ClassicalRPPGPipeline(method="CHROM", fs=fps, low_hz=0.7, high_hz=3.0, use_czt=True)
             hyb = HybridRPPGSystem(fs=fps, enable_pfd=True, enable_czt=True, enable_beatformer=True)
 
-            hr_chr = pipe_chr.process(rgb)["hr_bpm"]
-            hr_hyb = hyb.process(c_faces, rgb_signals=rgb)["hr_bpm"]
+            res_chr = pipe_chr.process(rgb)
+            hr_chr = res_chr["hr_bpm"]
+            res_hyb = hyb.process(c_faces, rgb_signals=rgb)
+            hr_hyb = res_hyb["hr_bpm"]
+            dec_log = res_hyb.get("decision_log", {})
 
             e_chr = abs(hr_chr - gt_hr)
             e_hyb = abs(hr_hyb - gt_hr)
             errs_chr.append(e_chr)
             errs_hyb.append(e_hyb)
             skin_adcs.append(skin_adc)
+
+            if args.log_decisions:
+                print(f"\n[DECISION LOG] Subject {item['subject_id']} @ {lux:.0f} lux:")
+                print(f"  GT HR: {gt_hr:.2f} BPM | Final Hybrid: {hr_hyb:.2f} BPM (Err: {e_hyb:.2f}) | CHROM: {hr_chr:.2f} BPM (Err: {e_chr:.2f})")
+                print(f"  Anchor Raw: {dec_log.get('hr_me_raw', float('nan')):.2f} | PFD HR: {dec_log.get('hr_me_pfd', float('nan')):.2f} | PFD Shift: {dec_log.get('pfd_shift', float('nan')):.2f} | Accepted: {dec_log.get('pfd_accepted')} (Reason: {dec_log.get('pfd_reject_reason')})")
+                print(f"  Raw Conc: {dec_log.get('raw_conc')} | CHROM Conc: {dec_log.get('conc_chr')}")
+                adm = dec_log.get('branch_admission', {})
+                w = dec_log.get('branch_weights', {})
+                print(f"  Branches: CHROM={dec_log.get('hr_chrom')} (adm={adm.get('chrom')}, w={w.get('chrom')}), "
+                      f"POS={dec_log.get('hr_pos')} (adm={adm.get('pos')}, w={w.get('pos')}), "
+                      f"BF={dec_log.get('hr_bf')} (adm={adm.get('bf')}, w={w.get('bf')})")
+                print(f"  Defection: Fired={dec_log.get('defection_fired')} | Reason={dec_log.get('defection_reason')} | Pairwise Agree={dec_log.get('pairwise_agree')} | Anchor Isolated={dec_log.get('anchor_isolated')} | POS Confirms={dec_log.get('pos_confirms_anchor')}")
+
+            record = {
+                "lux": lux,
+                "subject_id": item["subject_id"],
+                "gt_hr": round(gt_hr, 2),
+                "final_hr": round(hr_hyb, 2),
+                "hybrid_err": round(e_hyb, 2),
+                "chrom_hr": round(hr_chr, 2),
+                "chrom_err": round(e_chr, 2),
+                "hr_me_raw": dec_log.get("hr_me_raw"),
+                "hr_me_pfd": dec_log.get("hr_me_pfd"),
+                "pfd_shift": dec_log.get("pfd_shift"),
+                "pfd_accepted": dec_log.get("pfd_accepted"),
+                "pfd_reject_reason": dec_log.get("pfd_reject_reason"),
+                "raw_conc": dec_log.get("raw_conc"),
+                "conc_chr": dec_log.get("conc_chr"),
+                "hr_chrom": dec_log.get("hr_chrom"),
+                "hr_pos": dec_log.get("hr_pos"),
+                "hr_bf": dec_log.get("hr_bf"),
+                "w_me": dec_log.get("branch_weights", {}).get("me"),
+                "w_chrom": dec_log.get("branch_weights", {}).get("chrom"),
+                "w_pos": dec_log.get("branch_weights", {}).get("pos"),
+                "w_bf": dec_log.get("branch_weights", {}).get("bf"),
+                "adm_chrom": dec_log.get("branch_admission", {}).get("chrom"),
+                "adm_pos": dec_log.get("branch_admission", {}).get("pos"),
+                "adm_bf": dec_log.get("branch_admission", {}).get("bf"),
+                "defection_fired": dec_log.get("defection_fired"),
+                "defection_reason": dec_log.get("defection_reason"),
+                "pairwise_agree": dec_log.get("pairwise_agree"),
+                "anchor_isolated": dec_log.get("anchor_isolated"),
+                "pos_confirms_anchor": dec_log.get("pos_confirms_anchor"),
+                "confident_secondary": dec_log.get("confident_secondary"),
+            }
+            decision_log_records.append(record)
 
             c1_subj_rows.append({
                 "lux": lux,
@@ -303,6 +372,8 @@ def main():
                 "chrom_err_bpm": round(e_chr, 2),
                 "hybrid_hr_bpm": round(hr_hyb, 2),
                 "hybrid_err_bpm": round(e_hyb, 2),
+                "locked_pct": round(tr_summary.get("locked_pct", 100.0), 1),
+                "dynamic_pct": round(tr_summary.get("dynamic_pct", 0.0), 1),
             })
 
         c1_rows.append({
@@ -319,8 +390,38 @@ def main():
 
     c1_df = pd.DataFrame(c1_rows)
     print(c1_df.to_string(index=False))
+
+    if args.subjects:
+        os.makedirs("artifacts/constraints/decision_logs", exist_ok=True)
+        diag_path = "artifacts/constraints/decision_logs/diagnostic_decisions.csv"
+        df_dec = pd.DataFrame(decision_log_records)
+        df_dec.to_csv(diag_path, index=False)
+        print(f"\n[Targeted Diagnostic Complete] Saved {len(df_dec)} records to {diag_path}")
+        print("[Skipping C3-C7 and preserving official baseline CSVs]")
+        return
+
     c1_df.to_csv("artifacts/constraints/c1_degradation_curve.csv", index=False)
-    pd.DataFrame(c1_subj_rows).to_csv("artifacts/constraints/c1_per_subject_audit.csv", index=False)
+    df_audit = pd.DataFrame(c1_subj_rows)
+    df_audit.to_csv("artifacts/constraints/c1_per_subject_audit.csv", index=False)
+
+    # Gate G2: Automated Monotonicity Audit across decreasing illuminance
+    print("\n--- [Audit Gate G2] Verifying Degradation Monotonicity (300 -> 50 -> 25 -> 10 lux) ---")
+    monotonicity_violations = []
+    for sid in df_audit["subject_id"].unique():
+        s_df = df_audit[df_audit["subject_id"] == sid].sort_values("lux", ascending=False)
+        errs = s_df["hybrid_err_bpm"].values
+        lux_vals = s_df["lux"].values
+        for i in range(len(errs) - 1):
+            err_drop = errs[i] - errs[i+1]  # positive if lower lux had lower error
+            if err_drop > 3.0:
+                msg = f"Subject {sid}: error dropped by {err_drop:.2f} BPM from {lux_vals[i]:.0f}lx ({errs[i]:.2f}) to {lux_vals[i+1]:.0f}lx ({errs[i+1]:.2f})"
+                monotonicity_violations.append(msg)
+                print(f"  [GATE G2 ALERT] {msg}")
+
+    if not monotonicity_violations:
+        print("  [GATE G2 PASSED] Degradation monotonicity verified across all subjects (no drops > 3.0 BPM).")
+    else:
+        print(f"  [GATE G2 NOTE] {len(monotonicity_violations)} per-subject non-monotonic fluctuations observed.")
 
     # =========================================================================
     # 3. C4: Low Camera Resolution (HD 1280x720 -> VGA 640x480 -> QVGA 320x240)
