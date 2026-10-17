@@ -69,8 +69,12 @@ def main():
         gt_hr = item["gt_hr"]
         print(f"  Evaluating {sid} (fps={fps:.2f}, GT={gt_hr:.2f} BPM)...")
 
-        frames_50 = simulate_low_light_video(frames, target_lux=50.0, baseline_lux=300.0, seed=42)
-        frames_10 = simulate_low_light_video(frames, target_lux=10.0, baseline_lux=300.0, seed=42)
+        lux = 50.0
+        np.random.seed(1000 + int(lux))
+        frames_50 = simulate_low_light_video(frames, target_lux=lux, baseline_lux=300.0, seed=int(1000 + lux))
+        lux = 10.0
+        np.random.seed(1000 + int(lux))
+        frames_10 = simulate_low_light_video(frames, target_lux=lux, baseline_lux=300.0, seed=int(1000 + lux))
         masked_frames = simulate_masked_video(frames, tracker=extractor.tracker)
 
         ext_base = extractor.process_video(frames, fs=fps)
