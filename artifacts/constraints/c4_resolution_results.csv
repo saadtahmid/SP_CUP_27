@@ -1,4 +1,4 @@
 resolution,verified_frame_dim,n_subjects,chrom_mae_bpm,chrom_sd_bpm,hybrid_mae_bpm,hybrid_sd_bpm,hybrid_med_bpm
-HD,1280x720,10,8.34,16.37,1.95,3.67,0.71
-VGA,640x480,10,8.48,14.25,1.96,3.83,0.62
-QVGA,320x240,10,4.76,6.82,2.03,4.05,0.83
+HD,1280x720,10,8.34,16.37,2.75,4.02,0.8
+VGA,640x480,10,8.48,14.25,3.26,5.19,0.62
+QVGA,320x240,10,4.76,6.82,0.77,0.55,0.83

@@ -27,18 +27,18 @@ via Majority-Consensus State-Space and Spectral Attention Fusion\\[4pt]
 {\large 2027 IEEE Signal Processing Cup --- Round 1 Technical Report
 (Task 1 \& Constraints C1--C7)}}
 
-\author{\IEEEauthorblockN{[Team Name]}
+\author{\IEEEauthorblockN{Team FaceVitals}
 \IEEEauthorblockA{[Institution], [City, Country]\\
 Supervisor: [Faculty Supervisor, Ph.D.]\\
 Undergraduate Members: [Name 1] (SPS \#XXXXX), [Name 2] (SPS \#XXXXX),\\ \relax
 [Name 3] (SPS \#XXXXX), [Name 4], [Name 5], [Name 6]\\
-Software release: \texttt{v0.7.0-Consensus} $\cdot$
+Software release: \texttt{v0.7.1} $\cdot$
 Passband $[0.70, 3.00]$\,Hz $\cdot$ 22/22 tests passing}}
 
 \maketitle
 
 \begin{abstract}
-\noindent Camera-based remote photoplethysmography (rPPG) enables contactless cardiovascular monitoring from ordinary RGB facial video by recovering microvascular blood volume pulse (BVP) fluctuations. However, existing classical and deep-learning methods degrade severely under real-world deployment stressors, including photon starvation at low illuminance ($\le 50\text{ lux}$), epidermal melanin absorption across dark skin tones, bystander interference, spatial compression, and facial mask occlusion. This technical report presents the mathematical formulation, twelve-stage debugging chronicle (\texttt{v0.3.0} $\to$ \texttt{v0.7.0}), and multi-cohort experimental validation of the \textbf{FaceVitals Majority-Consensus Hybrid rPPG System} developed for Round 1 of the 2027 IEEE Signal Processing Cup~\cite{spcup2027}. The proposed pipeline integrates six synergistic modules: (1) Frame-0 locked \texttt{R4} anatomical sub-ROI extraction (forehead and bilateral cheeks) with conditional EMA tracking fallback ($\text{IoU} < 0.75$), YCbCr specular rejection, Rank-1 Non-Negative Matrix Factorization spatial attention~\cite{joshi2024factorizephys}, and autonomous cyan surgical mask gating; (2) illumination-normalized CIE $L^*a^*b^*$ Individual Typology Angle ($\text{ITA}^\circ$) stratification; (3) a 512-bin Chirp-Z Transform (CZT) zoomed spectral estimator ($0.27\text{ BPM/bin}$) with 3-point parabolic vertex interpolation; (4) a 580K-parameter Temporal-Spatial State-Space neural backbone (\texttt{ME-rPPG}~\cite{wang2025merppg}, $9.46\text{ ms}$ CPU latency) with 45-frame Recursive Moving Average (RMA) state pre-warming; (5) a Fundamental-Verified Physiological Frequency-prior Denoiser (\texttt{FreqPhys PFD}~\cite{qian2026freqphys}) with an $8.0\text{ BPM}$ harmonic shift cap that prevents sub-harmonic ($f_{\text{HR}}/2$) inversion; and (6) a 14.86K-parameter Zoomed Orthonormal Complex Attention spectral transformer (\texttt{BeatFormer-SCL}~\cite{comas2025beatformer}) with pairwise independent-branch defection ($\text{CHROM} \wedge \text{BeatFormer}$), harmonic exclusion guard, and anchor POS-confirmation. Across all 42 UBFC-rPPG subjects~\cite{bobbia2019ubfc}, the hybrid architecture reduces heart rate Mean Absolute Error (MAE) from $12.398\text{ BPM}$ (\texttt{POS+FFT}) to $\mathbf{1.415\text{ BPM}}$ ($\text{MedAE} = 0.557\text{ BPM}$, $r = 0.9672$, $\text{RMSE} = 3.921\text{ BPM}$) on the 450-frame contact PPG reference, $4.701\text{ BPM}$ ($r = 0.9078$) on clinical oximeter display, and $\mathbf{0.869\text{ BPM}}$ on full-length BVP recordings. Crucially, across all 88 clinical recordings from India and Sierra Leone in the AiPEX dataset~\cite{aipex2024} ($C_2$), architectural consensus achieves $\mathbf{8.85\text{ BPM}}$ population MAE with a maximum subgroup deviation of $\mathbf{2.79\text{ BPM}} \le 3.0\text{ BPM}$ (\textbf{PASSED} across all Fitzpatrick Types I--VI), canceling opposite signed biases that cause standalone \texttt{POS} ($\max\lvert\Delta\rvert=7.23\text{ BPM}$) and \texttt{CHROM} ($\max\lvert\Delta\rvert=4.54\text{ BPM}$) to fail demographic compliance. At the $50\text{ lux}$ low-light threshold ($C_1$, $25.67\text{ ADC}$), the system achieves $\mathbf{7.14 \pm 7.59\text{ BPM}}$ MAE ($\text{MedAE} = 3.10\text{ BPM}$, $6.52\text{ BPM}$ in ablation matrix) versus $19.93\text{ BPM}$ for classical \texttt{CHROM}, while passing multi-subject stress tests across constraints $C_3$, $C_4$, $C_5$, $C_6$, and $C_7$.
+\noindent Camera-based remote photoplethysmography (rPPG) enables contactless cardiovascular monitoring from ordinary RGB facial video by recovering microvascular blood volume pulse (BVP) fluctuations. However, existing classical and deep-learning methods degrade severely under real-world deployment stressors, including photon starvation at low illuminance ($\le 50\text{ lux}$), epidermal melanin absorption across dark skin tones, bystander interference, spatial compression, and facial mask occlusion. This technical report presents the mathematical formulation, thirteen-stage debugging chronicle (\texttt{v0.3.0} $\to$ \texttt{v0.7.1}), and multi-cohort experimental validation of the \textbf{FaceVitals Majority-Consensus Hybrid rPPG System} developed for Round 1 of the 2027 IEEE Signal Processing Cup~\cite{spcup2027}. The proposed pipeline integrates six synergistic modules: (1) Frame-0 locked \texttt{R4} anatomical sub-ROI extraction (forehead and bilateral cheeks) with conditional EMA tracking fallback ($\text{IoU} < 0.75$), YCbCr specular rejection, Rank-1 Non-Negative Matrix Factorization spatial attention~\cite{joshi2024factorizephys}, and autonomous cyan surgical mask gating; (2) illumination-normalized CIE $L^*a^*b^*$ Individual Typology Angle ($\text{ITA}^\circ$) stratification; (3) a 512-bin Chirp-Z Transform (CZT) zoomed spectral estimator ($0.27\text{ BPM/bin}$) with 3-point parabolic vertex interpolation; (4) a 580K-parameter Temporal-Spatial State-Space neural backbone (\texttt{ME-rPPG}~\cite{wang2025merppg}, $9.46\text{ ms}$ CPU latency) with 45-frame Recursive Moving Average (RMA) state pre-warming; (5) a Fundamental-Verified Physiological Frequency-prior Denoiser (\texttt{FreqPhys PFD}~\cite{qian2026freqphys}) with an $8.0\text{ BPM}$ harmonic shift cap that prevents sub-harmonic ($f_{\text{HR}}/2$) inversion; and (6) a 14.86K-parameter Zoomed Orthonormal Complex Attention spectral transformer (\texttt{BeatFormer-SCL}~\cite{comas2025beatformer}) with pairwise independent-branch defection ($\text{CHROM} \wedge \text{BeatFormer}$) and harmonic exclusion guard. Across all 42 UBFC-rPPG subjects~\cite{bobbia2019ubfc}, the hybrid architecture reduces heart rate Mean Absolute Error (MAE) from $12.398\text{ BPM}$ (\texttt{POS+FFT}) to $\mathbf{2.563\text{ BPM}}$ ($\text{MedAE} = 0.618\text{ BPM}$, $r = 0.9250$, $\text{RMSE} = 6.075\text{ BPM}$) on the 450-frame contact PPG reference, $5.817\text{ BPM}$ ($r = 0.8495$) on clinical oximeter display, and $\mathbf{0.869\text{ BPM}}$ on full-length BVP recordings. Crucially, across all 88 clinical recordings from India and Sierra Leone in the AiPEX dataset~\cite{aipex2024} ($C_2$), architectural consensus achieves $\mathbf{8.85\text{ BPM}}$ population MAE with a maximum subgroup deviation of $\mathbf{2.79\text{ BPM}} \le 3.0\text{ BPM}$ (\textbf{PASSED} across all Fitzpatrick Types I--VI), canceling opposite signed biases that cause standalone \texttt{POS} ($\max\lvert\Delta\rvert=7.23\text{ BPM}$) and \texttt{CHROM} ($\max\lvert\Delta\rvert=4.54\text{ BPM}$) to fail demographic compliance. At the $50\text{ lux}$ low-light threshold ($C_1$, $24.8\text{ ADC}$), the system achieves $\mathbf{7.14 \pm 7.59\text{ BPM}}$ MAE ($\text{MedAE} = 3.10\text{ BPM}$, $7.14\text{ BPM}$ in ablation matrix) versus $19.93\text{ BPM}$ for classical \texttt{CHROM}, while passing multi-subject stress tests across constraints $C_3$, $C_4$, $C_5$, $C_6$, and $C_7$.
 \end{abstract}
 
 \noindent\textbf{\small\textcolor{primary}{Index Terms---}} {\small Remote photoplethysmography (rPPG), Chirp-Z Transform (CZT), state-space duality, frequency-prior denoising, spectral contrastive learning, demographic fairness, IEEE Signal Processing Cup.}
@@ -192,7 +192,7 @@ w_{\text{BF}} &= 0.15\,\mathbb{I}\!\left(\lvert\text{HR}_{\text{BF}} - \text{HR}
 
 \begin{table*}[t]
 \centering
-\caption{Evolutionary Scientific Audit and Bug Resolution Progression Across Repository Releases (\texttt{v0.3.0} $\to$ \texttt{v0.5.2})}
+\caption{Evolutionary Scientific Audit and Bug Resolution Progression Across Repository Releases (\texttt{v0.3.0} $\to$ \texttt{v0.7.1})}
 \label{tab:changelog_audit}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lllll@{}}
@@ -210,16 +210,16 @@ w_{\text{BF}} &= 0.15\,\mathbb{I}\!\left(\lvert\text{HR}_{\text{BF}} - \text{HR}
 \texttt{v0.4.2} $\to$ \texttt{v0.5.1} & \texttt{run\_constraints.py}, \texttt{run\_ablation.py} & Constraints $C_1, C_3\text{--}C_7$ and ablation matrix previously evaluated on single subject (\texttt{subject4}) & Upgraded all constraint and ablation benchmarks to stratified 10-subject UBFC cohort (450f PPG GT) & Provided multi-subject $\text{MAE}\pm\text{SD}$ and $\text{MedAE}$ across all benchmarks \\
 \texttt{v0.5.1} $\to$ \texttt{v0.5.2} & \texttt{run\_cross\_dataset.py}, \texttt{test\_cross\_dataset.py} & Mock test runner hardcoded output to \texttt{artifacts/} directory, clobbering real PURE evaluation CSVs & Isolated pytest runner to \texttt{tmp\_path} and regenerated genuine 24-session PURE protocol benchmarks & Verified exact PURE protocol metrics ($0.47\text{ BPM}$ pooled MAE, $r = 0.9986$) across 20/20 tests \\
 \texttt{v0.5.2} $\to$ \texttt{v0.6.0} & \texttt{hybrid\_system.py}, \texttt{pfd\_module.py}, \texttt{roi\_extractor.py} & Anchor defection firing on broadband photon noise under $50\text{ lux}$; PFD sub-harmonic comb jumping on non-stationary sweeps; Frame-0 lock drift on head rotation & Added tripartite BeatFormer corroboration + spectral concentration gate; unit-proof harmonic-ratio PFD cap; low-light luminance floor ($\mu < 35\text{ ADC}$) + warm-EMA hysteresis & Cut 42-subject UBFC MAE to $1.240\text{ BPM}$ ($0.869\text{ BPM}$ continuous BVP); reduced $C_1$ at $50\text{ lux}$ to $7.14\text{ BPM}$ vs CHROM $19.93$; MMPD Rotation MedAE $3.89\text{ BPM}$ \\
-\texttt{v0.6.0} $\to$ \texttt{v0.7.0} & \texttt{models/hybrid/hybrid\_system.py} & POS sub-harmonic ($f_0/2$) collapse vetoed valid CHROM $\wedge$ BeatFormer consensus on \texttt{subject32}; false defection on \texttt{subject15} & Pairwise Independent-Branch Defection ($\text{CHROM} \wedge \text{BeatFormer}$), 4-ratio harmonic exclusion, POS anchor-confirmation, and luminance concentration gate & Resolved \texttt{subject32} error ($13.82 \to 0.80\text{ BPM}$); 42-subject UBFC MAE $\mathbf{1.415\text{ BPM}}$ ($r = 0.9672$); 22/22 unit tests passing \\
+\texttt{v0.6.0} $\to$ \texttt{v0.7.1} & \texttt{hybrid\_system.py}, \texttt{run\_constraints.py}, \texttt{run\_ablation.py} & Noise-correlated defection under 0.15 threshold degraded C5 (15.26 BPM), C7 (6.69 BPM), MMPD (15.99 BPM); seed mismatch caused C1 drift & Reverted unauthorized guards; restored reviewed pairwise CHROM $\wedge$ BeatFormer with flat conc 0.30 and $w_{\text{me}}=0.10$; unified seeds (1000+lux) & C5 MAE $8.57\text{ BPM}$, C7 $1.81\text{ BPM}$, MMPD $16.27\text{ BPM}$; 0.000 cross-script drift; 22/22 unit tests passing \\
 \bottomrule
 \end{tabular}%
 }
 \end{table*}
 
-\section{Evolutionary Engineering Chronicle and Scientific Audit (v0.3.0 to v0.7.0)}
+\section{Evolutionary Engineering Chronicle and Scientific Audit (v0.3.0 to v0.7.1)}
 \label{sec:audit}
 
-All architectural decisions in the repository were validated through an iterative scientific audit documented in \texttt{CHANGELOG.md}. Table~\ref{tab:changelog_audit} summarizes the twelve critical engineering bugs and paper-to-code gaps resolved between \texttt{v0.3.0} and \texttt{v0.7.0}.
+All architectural decisions in the repository were validated through an iterative scientific audit documented in \texttt{CHANGELOG.md}. Table~\ref{tab:changelog_audit} summarizes the thirteen critical engineering bugs and paper-to-code gaps resolved between \texttt{v0.3.0} and \texttt{v0.7.1}.
 
 Two audit milestones warrant particular emphasis. First, in \texttt{constraints/low\_light.py}, an earlier non-linear tone clamp (\texttt{gain = max(0.42, ratio ** 0.25)}, \texttt{peak\_photons = 4096.0}) had artificially prevented $10\text{ lux}$ frames from falling below $42\%$ brightness. Restoring strict physical linear illuminance scaling (\texttt{gain = target\_lux / baseline\_lux}) alongside 8-bit full-well Poisson shot noise (\texttt{peak\_photons = 255.0}), Gaussian read noise ($\sigma^2 = 10^{-4}$), and 8-bit \texttt{uint8} quantization established a physically exact low-light curve across $N=10$ subjects, proving compliance at the competition's $\le 50\text{ lux}$ threshold ($\text{MAE} = 7.14 \pm 7.59\text{ BPM}$, $\text{MedAE} = 3.10\text{ BPM}$ at $25.67\text{ ADC}$ versus $19.93\text{ BPM}$ for CHROM) while transparently documenting the sub-LSB quantization limit at $10\text{ lux}$ ($4.21\text{ ADC}$, $16.18 \pm 10.37\text{ BPM}$). Second, in \texttt{evaluation/fairness.py}, preserving the algebraic sign of per-stratum deviations $\Delta_g = \text{MAE}_g - \text{MAE}_{\text{pop}}$ reconciled the exact weighted population arithmetic across all 88 AiPEX subjects:
 \begin{align}
@@ -250,7 +250,7 @@ The complete 42-subject UBFC-rPPG dataset~\cite{bobbia2019ubfc} (\texttt{scripts
 3. \texttt{CHROM + 512-bin CZT} (Locked \texttt{R4} Sub-ROI) & 42 & 6.440 BPM & 0.938 BPM & 13.280 BPM & 0.6495 & 9.241 BPM & 14.702 BPM & 0.5772 & $-3.851$ $[-31.997, +24.295]$ BPM \\
 4. \texttt{ME-rPPG} (State-Space v2 + RMA Warmup) & 42 & 2.286 BPM & 1.219 BPM & 5.498 BPM & 0.9369 & 5.962 BPM & 8.964 BPM & 0.8338 & $-1.630$ $[-19.115, +15.855]$ BPM \\
 5. \texttt{ME-rPPG + FreqPhys PFD} (Fundamental-Verified) & 42 & 2.097 BPM & 0.577 BPM & 5.369 BPM & 0.9413 & 5.773 BPM & 8.510 BPM & 0.8525 & $-0.949$ $[-17.724, +15.827]$ BPM \\
-6. \textbf{\texttt{Hybrid v4} (Pairwise Consensus)} & \textbf{42} & \textbf{1.415 BPM} & \textbf{0.557 BPM} & \textbf{3.921 BPM} & \textbf{0.9672} & \textbf{4.701 BPM} & \textbf{6.603 BPM} & \textbf{0.9078} & $\mathbf{-0.775}$ $\mathbf{[-13.782, +12.232]}$ \textbf{BPM} \\
+6. \textbf{\texttt{Hybrid v4} (Pairwise Consensus)} & \textbf{42} & \textbf{2.563 BPM} & \textbf{0.618 BPM} & \textbf{6.075 BPM} & \textbf{0.9250} & \textbf{5.817 BPM} & \textbf{8.606 BPM} & \textbf{0.8495} & $\mathbf{-0.846}$ $\mathbf{[-17.836, +16.143]}$ \textbf{BPM} \\
 \midrule
 7. \textbf{Full-Length Clinical BVP Benchmark} & \textbf{42} & \textbf{0.869 BPM} & \textbf{0.125 BPM} & \textbf{2.171 BPM} & \textbf{0.9795} & 5.862 BPM & 8.914 BPM & 0.8412 & $+0.042$ $[-4.213, +4.297]$ BPM \\
 \bottomrule
@@ -271,12 +271,12 @@ The complete 42-subject UBFC-rPPG dataset~\cite{bobbia2019ubfc} (\texttt{scripts
 \texttt{subject3}  & 88.58  & 102.00 & 13.42& 100.32 & 100.49 & 0.17 & & \texttt{subject27} & 73.31  & 74.00  & 0.70 & 111.82 & 111.94 & 0.12 \\
 \texttt{subject4}  & 111.98 & 111.33 & 0.66 & 112.17 & 112.28 & 0.11 & & \texttt{subject30} & 86.12  & 87.50  & 1.37 & 102.59 & 102.72 & 0.13 \\
 \texttt{subject5}  & 97.64  & 98.01  & 0.37 & 100.95 & 100.90 & 0.05 & & \texttt{subject31} & 74.56  & 74.50  & 0.06 & 80.18  & 80.34  & 0.16 \\
-\texttt{subject8}  & 110.58 & 110.17 & 0.41 & 111.62 & 111.67 & 0.04 & & \texttt{subject32} & 88.90  & 88.10  & 0.80 & 116.52 & 116.64 & 0.11 \\
+\texttt{subject8}  & 110.58 & 110.17 & 0.41 & 111.62 & 111.67 & 0.04 & & \texttt{subject32} & 88.90  & 75.08  & 13.82 & 116.52 & 116.64 & 0.11 \\
 \texttt{subject9}  & 98.15  & 98.16  & 0.01 & 111.12 & 107.14 & 3.98 & & \texttt{subject33} & 111.95 & 112.30 & 0.35 & 113.44 & 121.91 & 8.48 \\
 \texttt{subject10} & 91.92  & 91.45  & 0.47 & 119.86 & 119.88 & 0.02 & & \texttt{subject34} & 119.81 & 120.71 & 0.90 & 115.74 & 115.82 & 0.07 \\
 \texttt{subject11} & 114.26 & 114.53 & 0.27 & 128.43 & 128.31 & 0.12 & & \texttt{subject35} & 83.52  & 83.27  & 0.24 & 116.94 & 117.01 & 0.07 \\
 \texttt{subject12} & 67.17  & 65.95  & 1.22 & 67.26  & 67.31  & 0.05 & & \texttt{subject36} & 100.51 & 102.30 & 1.79 & 121.73 & 121.72 & 0.00 \\
-\texttt{subject13} & 93.31  & 93.13  & 0.17 & 110.18 & 110.27 & 0.10 & & \texttt{subject37} & 66.61  & 67.47  & 0.87 & 55.03  & 55.12  & 0.09 \\
+\texttt{subject13} & 93.31  & 78.99  & 14.32 & 110.18 & 110.27 & 0.10 & & \texttt{subject37} & 66.61  & 67.47  & 0.87 & 55.03  & 55.12  & 0.09 \\
 \texttt{subject14} & 71.23  & 71.21  & 0.02 & 77.30  & 68.17  & 9.13 & & \texttt{subject38} & 111.30 & 111.49 & 0.18 & 111.92 & 111.74 & 0.19 \\
 \texttt{subject15} & 121.20 & 121.74 & 0.54 & 119.02 & 118.98 & 0.05 & & \texttt{subject39} & 83.29  & 83.50  & 0.21 & 87.49  & 86.37  & 1.12 \\
 \texttt{subject16} & 94.72  & 95.40  & 0.68 & 92.47  & 92.61  & 0.14 & & \texttt{subject40} & 85.12  & 84.73  & 0.40 & 87.97  & 87.91  & 0.05 \\
@@ -285,7 +285,7 @@ The complete 42-subject UBFC-rPPG dataset~\cite{bobbia2019ubfc} (\texttt{scripts
 \texttt{subject20} & 116.46 & 117.97 & 1.52 & 133.90 & 133.73 & 0.17 & & \texttt{subject43} & 92.80  & 92.45  & 0.35 & 99.76  & 99.41  & 0.35 \\
 \texttt{subject22} & 90.03  & 89.45  & 0.58 & 106.65 & 106.77 & 0.13 & & \texttt{subject44} & 76.02  & 76.26  & 0.24 & 86.95  & 88.64  & 1.69 \\
 \texttt{subject23} & 60.15  & 60.98  & 0.83 & 61.40  & 61.54  & 0.14 & & \texttt{subject45} & 110.31 & 111.22 & 0.91 & 111.70 & 111.75 & 0.05 \\
-\texttt{subject24} & 88.02  & 86.46  & 1.56 & 130.26 & 130.14 & 0.12 & & \texttt{subject46} & 103.15 & 103.65 & 0.49 & 92.31  & 93.59  & 1.27 \\
+\texttt{subject24} & 88.02  & 110.64 & 22.62 & 130.26 & 130.14 & 0.12 & & \texttt{subject46} & 103.15 & 103.65 & 0.49 & 92.31  & 93.59  & 1.27 \\
 \texttt{subject25} & 88.89  & 89.72  & 0.83 & 113.79 & 113.79 & 0.01 & & \texttt{subject47} & 107.07 & 107.52 & 0.45 & 117.01 & 117.14 & 0.13 \\
 \texttt{subject48} & 85.83  & 86.75  & 0.93 & 91.92  & 91.66  & 0.26 & & \texttt{subject49} & 90.25  & 90.27  & 0.03 & 85.85  & 85.71  & 0.14 \\
 \bottomrule
@@ -293,9 +293,9 @@ The complete 42-subject UBFC-rPPG dataset~\cite{bobbia2019ubfc} (\texttt{scripts
 }
 \end{table*}
 
-As shown in Table~\ref{tab:ubfc_summary} and Table~\ref{tab:ubfc_persubject}, replacing \texttt{POS + Welch FFT} with \texttt{POS + 512-bin CZT} refines the 42-subject Median Absolute Error ($2.763 \to 1.321\text{ BPM}$). Transitioning to \texttt{CHROM + CZT} on the Frame-0 locked \texttt{R4} sub-ROIs stabilizes color trajectories ($\text{MAE} = 6.440\text{ BPM}$, $r = 0.6495$). Adding the \texttt{ME-rPPG} state-space backbone lowers MAE to $2.286\text{ BPM}$ ($\text{MedAE} = 1.219\text{ BPM}$, $r = 0.9369$), Fundamental-Verified \texttt{FreqPhys PFD} reduces MAE to $2.097\text{ BPM}$ ($\text{MedAE} = 0.577\text{ BPM}$), and full \texttt{Hybrid v4} pairwise consensus achieves $\mathbf{1.415\text{ BPM}}$ MAE ($\text{MedAE} = \mathbf{0.557\text{ BPM}}$, $\text{RMSE} = 3.921\text{ BPM}$, $r = \mathbf{0.9672}$), with 40 of 42 subjects ($95.2\%$) achieving $<2.0\text{ BPM}$ error and 36 of 42 ($85.7\%$) achieving $<1.0\text{ BPM}$ error.
+As shown in Table~\ref{tab:ubfc_summary} and Table~\ref{tab:ubfc_persubject}, replacing \texttt{POS + Welch FFT} with \texttt{POS + 512-bin CZT} refines the 42-subject Median Absolute Error ($2.763 \to 1.321\text{ BPM}$). Transitioning to \texttt{CHROM + CZT} on the Frame-0 locked \texttt{R4} sub-ROIs stabilizes color trajectories ($\text{MAE} = 6.440\text{ BPM}$, $r = 0.6495$). Adding the \texttt{ME-rPPG} state-space backbone lowers MAE to $2.286\text{ BPM}$ ($\text{MedAE} = 1.219\text{ BPM}$, $r = 0.9369$), Fundamental-Verified \texttt{FreqPhys PFD} reduces MAE to $2.097\text{ BPM}$ ($\text{MedAE} = 0.577\text{ BPM}$), and full \texttt{Hybrid v4} pairwise consensus achieves $\mathbf{2.563\text{ BPM}}$ MAE ($\text{MedAE} = \mathbf{0.618\text{ BPM}}$, $\text{RMSE} = 6.075\text{ BPM}$, $r = \mathbf{0.9250}$), with 37 of 42 subjects ($88.1\%$) achieving $<2.0\text{ BPM}$ error and 34 of 42 ($81.0\%$) achieving $<1.0\text{ BPM}$ error.
 
-\noindent\textit{Failure-mode audit and dual-peak ground truth census:} Pairwise independent-branch defection ($\text{CHROM} \wedge \text{BeatFormer}$) eliminates the POS sub-harmonic veto, collapsing error on \texttt{subject32} from $13.82\text{ BPM}$ down to $0.80\text{ BPM}$ ($88.10\text{ BPM}$ vs $88.90\text{ BPM}$ GT). On \texttt{subject27}, error is bounded to $0.70\text{ BPM}$ ($74.00$ vs $73.31\text{ BPM}$). Across the entire 42-subject cohort, only \texttt{subject3} ($13.42\text{ BPM}$) and \texttt{subject41} ($21.01\text{ BPM}$) deviate $>2.0\text{ BPM}$. Crucially, an audit of contact PPG spectra across all 42 subjects (\texttt{artifacts/constraints/gt\_dual\_peak\_census.csv}) reveals 5 bimodal subjects ($P_2/P_1 \ge 0.50$): \texttt{subject3} (0.656), \texttt{subject27} (0.562), \texttt{subject32} (0.760), \texttt{subject36} (0.888), and \texttt{subject39} (0.553). On \texttt{subject3}, the optical branches (\texttt{CHROM} $105.20\text{ BPM}$, \texttt{BeatFormer} $101.68\text{ BPM}$) track secondary physiological Peak 2 ($103.30\text{ BPM}$), producing a fused estimate of $102.00\text{ BPM}$ that agrees with the synchronized clinical finger oximeter ($97.98\text{ BPM}$, error $4.02\text{ BPM}$) rather than the bimodal contact sensor artifact ($88.58\text{ BPM}$).
+\noindent\textit{Failure-mode audit and dual-peak ground truth census\footnote{$N = 5$ of 42 UBFC subjects exhibit bimodal contact-PPG spectra (secondary peak $\ge 50\%$ of primary power): \texttt{subject3}, \texttt{subject27}, \texttt{subject32}, \texttt{subject36}, \texttt{subject39}. For these recordings the dominant-bin reference and the clinical oximeter disagree; per-subject dual-reference errors are reported in Table~\ref{tab:ubfc_persubject}.}:} Pairwise independent-branch defection ($\text{CHROM} \wedge \text{BeatFormer}$) protects against single-branch sub-harmonic vetoes while enforcing flat concentration ($\ge 0.30$) to prevent noise-correlated false defections. On \texttt{subject27}, error is bounded to $0.70\text{ BPM}$ ($74.00$ vs $73.31\text{ BPM}$). Five recordings exhibit $>2.0\text{ BPM}$ error on the 450-frame contact PPG window: \texttt{subject3} ($13.42\text{ BPM}$), \texttt{subject13} ($14.32\text{ BPM}$), \texttt{subject24} ($22.62\text{ BPM}$), \texttt{subject32} ($13.82\text{ BPM}$), and \texttt{subject41}\footnote{\texttt{subject41} ($21.01\text{ BPM}$) reflects anchor failure on a low-SNR recording; the pairwise defection rule did not fire because \texttt{no\_pairwise\_agree}. Disclosed without per-subject tuning.} ($21.01\text{ BPM}$). On \texttt{subject3}, the optical branches (\texttt{CHROM} $105.20\text{ BPM}$, \texttt{BeatFormer} $101.68\text{ BPM}$) track secondary physiological Peak 2 ($103.30\text{ BPM}$), producing a fused estimate of $102.00\text{ BPM}$ that agrees with the synchronized clinical finger oximeter ($97.98\text{ BPM}$, error $4.02\text{ BPM}$) rather than the bimodal contact sensor artifact ($88.58\text{ BPM}$).
 
 \subsection{Contextual Comparison Against Published UBFC-rPPG Benchmarks}
 
@@ -430,7 +430,7 @@ Constraints $C_1$ and $C_3\text{--}C_7$ were evaluated across a stratified 10-su
 \toprule
 \textbf{Subject ID} & \textbf{PPG GT (BPM)} & \textbf{300 lux ADC} & \textbf{300 lux CHROM Err} & \textbf{300 lux Hybrid Err} & \textbf{50 lux ADC} & \textbf{50 lux CHROM Err} & \textbf{50 lux Hybrid Err} & \textbf{25 lux ADC} & \textbf{25 lux CHROM Err} & \textbf{25 lux Hybrid Err} & \textbf{10 lux ADC} & \textbf{10 lux CHROM Err} & \textbf{10 lux Hybrid Err} \\
 \midrule
-\texttt{subject1}  & 99.27  & 156.51 & 0.25  & 1.11  & 26.26 & 19.27 & 0.40  & 13.03 & 17.01 & 0.23  & 3.85 & 16.26 & 0.29  \\
+\texttt{subject1}  & 99.27  & 156.51 & 0.25  & 1.11  & 26.26 & 19.27 & 0.40  & 13.03 & 17.01 & 14.79 & 3.85 & 16.26 & 0.29  \\
 \texttt{subject3}  & 88.58  & 124.69 & 16.62 & 13.42 & 21.18 & 14.20 & 10.38 & 10.85 & 55.39 & 16.01 & 4.49 & 21.33 & 23.63 \\
 \texttt{subject4}  & 111.98 & 166.64 & 14.28 & 0.66  & 27.97 & 15.26 & 0.85  & 9.93  & 44.46 & 26.67 & 4.17 & 3.88  & 11.15 \\
 \texttt{subject8}  & 110.58 & 168.30 & 1.85  & 0.41  & 29.45 & 41.87 & 18.33 & 10.46 & 22.86 & 20.07 & 4.37 & 2.43  & 9.67  \\
@@ -438,12 +438,12 @@ Constraints $C_1$ and $C_3\text{--}C_7$ were evaluated across a stratified 10-su
 \texttt{subject12} & 67.17  & 138.51 & 1.69  & 1.22  & 27.48 & 0.97  & 0.90  & 10.61 & 23.23 & 1.75  & 4.41 & 39.33 & 28.42 \\
 \texttt{subject15} & 121.20 & 161.41 & 47.55 & 0.54  & 27.20 & 36.10 & 21.93 & 11.20 & 63.84 & 17.50 & 4.63 & 19.04 & 35.84 \\
 \texttt{subject22} & 90.03  & 142.11 & 0.60  & 0.58  & 24.82 & 0.22  & 0.77  & 8.35  & 37.22 & 4.04  & 3.60 & 26.45 & 15.89 \\
-\texttt{subject32} & 88.90  & 137.73 & 0.97  & 0.80  & 22.37 & 12.53 & 11.64 & 8.82  & 19.03 & 10.76 & 3.76 & 0.56  & 11.64 \\
+\texttt{subject32} & 88.90  & 137.73 & 0.97  & 13.82 & 22.37 & 12.53 & 11.64 & 8.82  & 19.03 & 10.76 & 3.76 & 0.56  & 11.64 \\
 \texttt{subject40} & 85.12  & 162.44 & 0.41  & 0.40  & 22.19 & 25.36 & 1.56  & 11.11 & 8.84  & 21.27 & 4.58 & 50.85 & 45.40 \\
 \midrule
-\textbf{Cohort Mean (MAE)} & \textbf{95.48} & \textbf{151.77} & \textbf{8.48} & \textbf{1.96} & \textbf{25.67} & \textbf{19.93} & \textbf{7.14} & \textbf{10.44} & \textbf{33.48} & \textbf{12.18} & \textbf{4.21} & \textbf{23.25} & \textbf{20.22} \\
-\textbf{Cohort SD ($\pm$BPM)} & 15.19 & 14.50 & 14.25 & 3.83 & 2.65 & 13.47 & 7.59 & 1.34 & 17.12 & 8.91 & 0.35 & 18.09 & 12.81 \\
-\textbf{Cohort Median (MedAE)} & 90.98 & 157.93 & 1.33 & \textbf{0.62} & 26.73 & 17.27 & \textbf{3.10} & 10.54 & 30.22 & \textbf{13.39} & 4.29 & 20.18 & \textbf{18.10} \\
+\textbf{Cohort Mean (MAE)} & \textbf{95.48} & \textbf{151.77} & \textbf{8.48} & \textbf{3.26} & \textbf{25.67} & \textbf{19.93} & \textbf{7.14} & \textbf{10.44} & \textbf{33.48} & \textbf{13.64} & \textbf{4.21} & \textbf{23.25} & \textbf{20.22} \\
+\textbf{Cohort SD ($\pm$BPM)} & 15.19 & 14.50 & 14.25 & 5.19 & 2.65 & 13.47 & 7.59 & 1.34 & 17.12 & 7.98 & 0.35 & 18.09 & 12.81 \\
+\textbf{Cohort Median (MedAE)} & 90.98 & 157.93 & 1.33 & \textbf{0.62} & 26.73 & 17.27 & \textbf{3.10} & 10.54 & 30.22 & \textbf{15.40} & 4.29 & 20.18 & \textbf{18.10} \\
 \bottomrule
 \end{tabular}%
 }
@@ -458,19 +458,19 @@ Constraints $C_1$ and $C_3\text{--}C_7$ were evaluated across a stratified 10-su
 \toprule
 \textbf{Constraint \& Condition} & \textbf{Cohort} & \textbf{Hybrid MAE $\pm$ SD} & \textbf{MedAE} & \textbf{Status} \\
 \midrule
-$C_1$: 300 lux Baseline ($151.8\text{ ADC}$) & $N=10$ & $1.96 \pm 3.83\text{ BPM}$ & $0.62\text{ BPM}$ & \textbf{PASSED} \\
+$C_1$: 300 lux Baseline ($151.8\text{ ADC}$) & $N=10$ & $3.26 \pm 5.19\text{ BPM}$ & $0.62\text{ BPM}$ & \textbf{PASSED} \\
 $C_1$: \textbf{50 lux Spec Threshold} ($25.7\text{ ADC}$) & $N=10$ & $\mathbf{7.14 \pm 7.59\text{ BPM}}$ & $\mathbf{3.10\text{ BPM}}$ & \textbf{PASSED} \\
-$C_1$: 25 lux Dim Room ($10.4\text{ ADC}$) & $N=10$ & $12.18 \pm 8.91\text{ BPM}$ & $13.39\text{ BPM}$ & Evaluated \\
+$C_1$: 25 lux Dim Room ($10.4\text{ ADC}$) & $N=10$ & $13.64 \pm 7.98\text{ BPM}$ & $15.40\text{ BPM}$ & Evaluated \\
 $C_1$: 10 lux Sub-LSB Floor ($4.2\text{ ADC}$) & $N=10$ & $20.22 \pm 12.81\text{ BPM}$ & $18.10\text{ BPM}$ & Evaluated \\
 $C_2$: AiPEX Skin-Tone Fairness (I--VI) & $N=88$ & $8.85\text{ BPM}$ ($\lvert\Delta\rvert\le 2.79$) & $6.17\text{ BPM}$ & \textbf{PASSED} \\
-$C_3$: Multi-Person (+115 BPM Distractor) & $N=10$ & $0.79 \pm 0.55\text{ BPM}$ & $0.73\text{ BPM}$ & \textbf{PASSED} \\
-$C_4$: HD ($1280\times 720$) Resolution & $N=10$ & $1.95 \pm 3.67\text{ BPM}$ & $0.71\text{ BPM}$ & \textbf{PASSED} \\
-$C_4$: VGA ($640\times 480$) Resolution & $N=10$ & $1.96 \pm 3.83\text{ BPM}$ & $0.62\text{ BPM}$ & \textbf{PASSED} \\
-$C_4$: QVGA ($320\times 240$) Resolution & $N=10$ & $2.03 \pm 4.05\text{ BPM}$ & $0.83\text{ BPM}$ & \textbf{PASSED} \\
-$C_5$: 10 fps Decimation ($9.87\text{ Hz}$ + Spline) & $N=10$ & $1.01 \pm 1.26\text{ BPM}$ & $0.53\text{ BPM}$ & \textbf{PASSED} \\
-$C_5$: 400 kbps MPEG-4 (\texttt{-b:v 400k -g 300}) & $N=10$ & $15.26 \pm 16.36\text{ BPM}$ & $6.00\text{ BPM}$ & PARTIAL \\
-$C_6$: Aging Skin Wrinkle ($\sigma = 0.35$) & $N=10$ & $1.36 \pm 2.02\text{ BPM}$ & $0.49\text{ BPM}$ & \textbf{PASSED} \\
-$C_7$: Surgical Mask Occlusion ($\ge 40\%$) & $N=10$ & $6.69 \pm 12.75\text{ BPM}$ & $0.82\text{ BPM}$ & \textbf{PASSED} \\
+$C_3$: Multi-Person (+115 BPM Distractor) & $N=10$ & $2.04 \pm 3.90\text{ BPM}$ & $0.73\text{ BPM}$ & \textbf{PASSED} \\
+$C_4$: HD ($1280\times 720$) Resolution & $N=10$ & $2.75 \pm 4.02\text{ BPM}$ & $0.80\text{ BPM}$ & \textbf{PASSED} \\
+$C_4$: VGA ($640\times 480$) Resolution & $N=10$ & $3.26 \pm 5.19\text{ BPM}$ & $0.62\text{ BPM}$ & \textbf{PASSED} \\
+$C_4$: QVGA ($320\times 240$) Resolution & $N=10$ & $0.77 \pm 0.55\text{ BPM}$ & $0.83\text{ BPM}$ & \textbf{PASSED} \\
+$C_5$: 10 fps Decimation ($9.87\text{ Hz}$ + Spline) & $N=10$ & $1.92 \pm 3.00\text{ BPM}$ & $0.53\text{ BPM}$ & \textbf{PASSED} \\
+$C_5$: 400 kbps MPEG-4 (\texttt{-b:v 400k -g 300}) & $N=10$ & $8.57 \pm 14.47\text{ BPM}$ & $2.24\text{ BPM}$ & \textbf{PASSED} (tail: \texttt{subject15, 32}) \\
+$C_6$: Aging Skin Wrinkle ($\sigma = 0.35$) & $N=10$ & $2.07 \pm 2.90\text{ BPM}$ & $0.49\text{ BPM}$ & \textbf{PASSED} \\
+$C_7$: Surgical Mask Occlusion ($\ge 40\%$) & $N=10$ & $1.81 \pm 2.54\text{ BPM}$ & $0.81\text{ BPM}$ & \textbf{PASSED} \\
 \bottomrule
 \end{tabular}%
 }
@@ -484,14 +484,14 @@ $C_7$: Surgical Mask Occlusion ($\ge 40\%$) & $N=10$ & $6.69 \pm 12.75\text{ BPM
 \end{figure}
 
 \begin{enumerate}\setlength{\itemsep}{1.5pt}\setlength{\parskip}{0pt}
-    \item \textbf{Low-Light Behavior ($C_1$):} At the $50\text{ lux}$ competition threshold ($25.67\text{ ADC}$), \texttt{Hybrid v4} achieves $7.14 \pm 7.59\text{ BPM}$ MAE ($\text{MedAE} = 3.10\text{ BPM}$), outperforming standalone \texttt{CHROM} ($19.93 \pm 13.47\text{ BPM}$) by $64.2\%$. Under the hardened low-light luminance floor ($\mu < 35\text{ ADC}$), the face anchor remains 100\% locked, suppressing detector noise flutter. In contrast to CHROM which exhibits bimodal harmonic divergence, \texttt{Hybrid v4} degrades monotonically across illuminance ($1.96 \to 7.14 \to 12.18 \to 20.22\text{ BPM}$), as plotted in Fig.~\ref{fig:c1_degradation}.
-    \item \textbf{Multi-Face Isolation ($C_3$) \& Resolution Invariance ($C_4$):} \texttt{TargetFaceKalmanTracker} rejects the $115.0\text{ BPM}$ bystander face with $0.79 \pm 0.55\text{ BPM}$ MAE ($\text{MedAE} = 0.73\text{ BPM}$). Across HD, VGA, and QVGA ($320\times 240$), MAE remains robust ($1.95, 1.96, 2.03\text{ BPM}$) because the $36\times 36$ \texttt{INTER\_AREA} crop and $\sim 2,500$-pixel \texttt{R4} masks average out spatial quantization noise by $\sqrt{N_{\text{pix}}}$.
-    \item \textbf{Low Bandwidth ($C_5$), Aging Skin ($C_6$), \& Surgical Mask ($C_7$):} Under $10\text{ fps}$ decimation, cubic spline $30\text{ Hz}$ reconstruction achieves $1.01 \pm 1.26\text{ BPM}$ MAE ($\text{MedAE} = 0.53\text{ BPM}$). Under $400\text{ kbps}$ MPEG-4 compression (\texttt{-g 300}), macroblock quantization produces an elevated mean MAE of $15.26\text{ BPM}$, with median error bounded to $6.00\text{ BPM}$ (tails documented in \texttt{c5\_per\_subject\_audit.csv}). Under $C_6$ directional DoG wrinkle perturbation ($\sigma = 0.35$), MAE is $1.36 \pm 2.02\text{ BPM}$ (MedAE $= 0.49\text{ BPM}$), confirming that Frame-0 locked R4 pooling averages micro-shadow modulation below the cardiac band. Under $C_7$ surgical mask occlusion ($\ge 40\%$ lower-face coverage), the autonomous cyan chrominance gate locks weights to $[1.0, 0.0, 0.0]$ (forehead-only), achieving $6.69 \pm 12.75\text{ BPM}$ ($\text{MedAE} = 0.82\text{ BPM}$) versus $9.81\text{ BPM}$ for CHROM without any manual occlusion flag.
+    \item \textbf{Low-Light Behavior ($C_1$):} At the $50\text{ lux}$ competition threshold ($25.67\text{ ADC}$), \texttt{Hybrid v4} achieves $7.14 \pm 7.59\text{ BPM}$ MAE ($\text{MedAE} = 3.10\text{ BPM}$), outperforming standalone \texttt{CHROM} ($19.93 \pm 13.47\text{ BPM}$) by $64.2\%$. Under the hardened low-light luminance floor ($\mu < 35\text{ ADC}$), the face anchor remains 100\% locked, suppressing detector noise flutter. In contrast to CHROM which exhibits bimodal harmonic divergence, \texttt{Hybrid v4} degrades monotonically across illuminance ($3.26 \to 7.14 \to 13.64 \to 20.22\text{ BPM}$), as plotted in Fig.~\ref{fig:c1_degradation}.
+    \item \textbf{Multi-Face Isolation ($C_3$) \& Resolution Invariance ($C_4$):} \texttt{TargetFaceKalmanTracker} rejects the $115.0\text{ BPM}$ bystander face with $2.04 \pm 3.90\text{ BPM}$ MAE ($\text{MedAE} = 0.73\text{ BPM}$). Across HD, VGA, and QVGA ($320\times 240$), MAE remains robust ($2.75, 3.26, 0.77\text{ BPM}$) because the $36\times 36$ \texttt{INTER\_AREA} crop and $\sim 2,500$-pixel \texttt{R4} masks average out spatial quantization noise by $\sqrt{N_{\text{pix}}}$.
+    \item \textbf{Low Bandwidth ($C_5$), Aging Skin ($C_6$), \& Surgical Mask ($C_7$):} Under $10\text{ fps}$ decimation, cubic spline $30\text{ Hz}$ reconstruction achieves $1.92 \pm 3.00\text{ BPM}$ MAE ($\text{MedAE} = 0.53\text{ BPM}$). Under $400\text{ kbps}$ MPEG-4 compression (\texttt{-g 300}), macroblock quantization produces MAE of $8.57 \pm 14.47\text{ BPM}$ ($\text{MedAE} = 2.24\text{ BPM}$, with failing tail on \texttt{subject15} and \texttt{subject32} documented in \texttt{c5\_per\_subject\_audit.csv}). Under $C_6$ directional DoG wrinkle perturbation ($\sigma = 0.35$), MAE is $2.07 \pm 2.90\text{ BPM}$ (MedAE $= 0.49\text{ BPM}$), confirming that Frame-0 locked R4 pooling averages micro-shadow modulation below the cardiac band. Under $C_7$ surgical mask occlusion ($\ge 40\%$ lower-face coverage), the autonomous cyan chrominance gate locks weights to $[1.0, 0.0, 0.0]$ (forehead-only), achieving $1.81 \pm 2.54\text{ BPM}$ ($\text{MedAE} = 0.81\text{ BPM}$) versus $9.81\text{ BPM}$ for CHROM without any manual occlusion flag.
 \end{enumerate}
 
 \subsection{Six-Stage Multi-Subject Component Ablation Matrix}
 
-Table~\ref{tab:ablation_matrix} reports the 6-row factorial ablation across the 10-subject UBFC cohort (\texttt{scripts/run\_ablation\_matrix.py}). Each row isolates a specific architectural contribution: 512-bin CZT zooming cuts raw bounding-box error from $15.50$ to $13.87\text{ BPM}$ (Row 2); Frame-0 locked \texttt{R4} sub-ROIs and the cyan mask gate cut baseline error to $8.48\text{ BPM}$ and $C_7$ masked error to $9.81\text{ BPM}$ (Row 3); \texttt{ME-rPPG} state-space modeling cuts $50\text{ lux}$ low-light error by $66.1\%$ from $20.25$ to $6.86\text{ BPM}$ (Row 4); and Fundamental-Verified \texttt{FreqPhys PFD} + \texttt{BeatFormer} consensus achieves the optimal baseline error of $1.96\text{ BPM}$ and $6.52\text{ BPM}$ under $50\text{ lux}$ low light (Rows 5--6).
+Table~\ref{tab:ablation_matrix} reports the 6-row factorial ablation across the 10-subject UBFC cohort (\texttt{scripts/run\_ablation\_matrix.py}). Each row isolates a specific architectural contribution: 512-bin CZT zooming cuts raw bounding-box error from $15.50$ to $13.87\text{ BPM}$ (Row 2); Frame-0 locked \texttt{R4} sub-ROIs and the cyan mask gate cut baseline error to $8.48\text{ BPM}$ and $C_7$ masked error to $9.81\text{ BPM}$ (Row 3); \texttt{ME-rPPG} state-space modeling cuts $50\text{ lux}$ low-light error by $64.2\%$ from $19.93$ to $7.14\text{ BPM}$ (Row 4); and full consensus achieves $3.26\text{ BPM}$ baseline error, $7.14\text{ BPM}$ under $50\text{ lux}$ low light, and $1.81\text{ BPM}$ under mask occlusion (Row 6).
 
 \begin{table*}[t]
 \centering
@@ -502,12 +502,12 @@ Table~\ref{tab:ablation_matrix} reports the 6-row factorial ablation across the 
 \toprule
 \textbf{Configuration} & \textbf{Spectral Estimator} & \textbf{BBox \& Skin Filter} & \textbf{Denoiser / Attention} & \textbf{Baseline (300 lux) MAE $\pm$ SD} & \textbf{$C_1$ (50 lux) MAE $\pm$ SD} & \textbf{$C_1$ (10 lux) MAE $\pm$ SD} & \textbf{$C_7$ (Masked) MAE $\pm$ SD} \\
 \midrule
-1. \texttt{Baseline v0 (POS + Welch FFT)} & Welch FFT & Raw Full BBox & None (\texttt{POS}) & $15.50 \pm 20.13\text{ BPM}$ & $16.56 \pm 12.21\text{ BPM}$ & $22.99 \pm 18.24\text{ BPM}$ & $18.64 \pm 12.30\text{ BPM}$ \\
-2. \texttt{+ CZT Zooming (POS + 512-bin CZT)} & 512-bin CZT & Raw Full BBox & None (\texttt{POS}) & $13.87 \pm 19.13\text{ BPM}$ & $18.05 \pm 16.25\text{ BPM}$ & $21.29 \pm 14.40\text{ BPM}$ & $21.33 \pm 18.66\text{ BPM}$ \\
-3. \texttt{+ Locked R4 Sub-ROI \& Mask Gate (CHROM)} & 512-bin CZT & Locked \texttt{R4} + Mask Gate & Chrominance (\texttt{CHROM}) & $8.48 \pm 14.25\text{ BPM}$ & $20.25 \pm 13.15\text{ BPM}$ & $15.19 \pm 9.09\text{ BPM}$ & $9.81 \pm 14.66\text{ BPM}$ \\
-4. \texttt{Pipeline v2 (ME-rPPG State-Space)} & 512-bin CZT & Locked BBox + $36\times 36$ Crop & \texttt{ME-rPPG} State-Space & $2.46 \pm 3.46\text{ BPM}$ & $6.86 \pm 9.38\text{ BPM}$ & $16.33 \pm 13.99\text{ BPM}$ & $2.50 \pm 2.65\text{ BPM}$ \\
-5. \texttt{+ FreqPhys PFD (Fundamental-Verified)} & 512-bin CZT & Locked BBox + $36\times 36$ Crop & \texttt{ME-rPPG + PFD} & $2.56 \pm 4.16\text{ BPM}$ & $\mathbf{4.85 \pm 5.67\text{ BPM}}$ & $17.24 \pm 13.87\text{ BPM}$ & $\mathbf{1.78 \pm 2.55\text{ BPM}}$ \\
-6. \textbf{\texttt{Pipeline v3/v4 (Full Consensus Hybrid)}} & \textbf{512-bin CZT} & \textbf{Locked \texttt{R4} + Mask Gate} & \textbf{\texttt{ME-rPPG + PFD + BeatFormer + CHROM}} & $\mathbf{1.96 \pm 3.83\text{ BPM}}$ & $\mathbf{6.52 \pm 6.14\text{ BPM}}$ & $\mathbf{17.10 \pm 14.00\text{ BPM}}$ & $6.69 \pm 12.75\text{ BPM}$ \\
+1. \texttt{Baseline v0 (POS + Welch FFT)} & Welch FFT & Raw Full BBox & None (\texttt{POS}) & $15.50 \pm 20.13\text{ BPM}$ & $28.77 \pm 24.38\text{ BPM}$ & $19.46 \pm 18.31\text{ BPM}$ & $18.64 \pm 12.30\text{ BPM}$ \\
+2. \texttt{+ CZT Zooming (POS + 512-bin CZT)} & 512-bin CZT & Raw Full BBox & None (\texttt{POS}) & $13.87 \pm 19.13\text{ BPM}$ & $25.17 \pm 25.57\text{ BPM}$ & $23.80 \pm 21.18\text{ BPM}$ & $21.33 \pm 18.66\text{ BPM}$ \\
+3. \texttt{+ Locked R4 Sub-ROI \& Mask Gate (CHROM)} & 512-bin CZT & Locked \texttt{R4} + Mask Gate & Chrominance (\texttt{CHROM}) & $8.48 \pm 14.25\text{ BPM}$ & $19.93 \pm 13.47\text{ BPM}$ & $23.25 \pm 18.09\text{ BPM}$ & $9.81 \pm 14.66\text{ BPM}$ \\
+4. \texttt{Pipeline v2 (ME-rPPG State-Space)} & 512-bin CZT & Locked BBox + $36\times 36$ Crop & \texttt{ME-rPPG} State-Space & $\mathbf{2.46 \pm 3.46\text{ BPM}}$ & $\mathbf{7.14 \pm 6.85\text{ BPM}}$ & $\mathbf{15.72 \pm 9.14\text{ BPM}}$ & $2.50 \pm 2.65\text{ BPM}$ \\
+5. \texttt{+ FreqPhys PFD (Fundamental-Verified)} & 512-bin CZT & Locked BBox + $36\times 36$ Crop & \texttt{ME-rPPG + PFD} & $2.56 \pm 4.16\text{ BPM}$ & $7.19 \pm 7.49\text{ BPM}$ & $16.18 \pm 10.37\text{ BPM}$ & $\mathbf{1.78 \pm 2.55\text{ BPM}}$ \\
+6. \textbf{\texttt{Pipeline v3/v4 (Full Consensus Hybrid)}} & \textbf{512-bin CZT} & \textbf{Locked \texttt{R4} + Mask Gate} & \textbf{\texttt{ME-rPPG + PFD + BeatFormer + CHROM}} & $3.26 \pm 5.19\text{ BPM}$ & $\mathbf{7.14 \pm 7.59\text{ BPM}}$ & $20.22 \pm 12.81\text{ BPM}$ & $1.81 \pm 2.54\text{ BPM}$ \\
 \bottomrule
 \end{tabular}%
 }
@@ -527,28 +527,28 @@ To assess real-world generalization across mobile phone capture environments, we
 \toprule
 \textbf{Dimension} & \textbf{Condition / Stratum} & \textbf{$N$} & \textbf{POS MAE} & \textbf{CHROM MAE} & \textbf{ME MAE} & \textbf{Hybrid MAE} & \textbf{Hybrid MedAE} \\
 \midrule
-Skin Tone & Fitzpatrick III (Intermediate) & 16 & 15.20 & 13.80 & 14.46 & \textbf{9.45 BPM} & \textbf{4.82 BPM} \\
-Skin Tone & Fitzpatrick IV (Tan)          & 16 & 42.47 & 22.81 & \textbf{18.92} & 22.60 BPM & 20.68 BPM \\
-Skin Tone & Fitzpatrick V (Brown)         & 16 & 27.09 & 20.33 & \textbf{19.20} & 19.40 BPM & 17.76 BPM \\
-Skin Tone & Fitzpatrick VI (Dark)         & 16 & 28.66 & 19.96 & \textbf{11.13} & 12.53 BPM & \textbf{6.92 BPM} \\
+Skin Tone & Fitzpatrick III (Intermediate) & 16 & 15.20 & 13.80 & 14.46 & \textbf{11.52 BPM} & \textbf{4.71 BPM} \\
+Skin Tone & Fitzpatrick IV (Tan)          & 16 & 42.47 & 22.81 & \textbf{18.92} & 21.29 BPM & 21.31 BPM \\
+Skin Tone & Fitzpatrick V (Brown)         & 16 & 27.09 & 20.33 & \textbf{19.20} & 21.14 BPM & 19.76 BPM \\
+Skin Tone & Fitzpatrick VI (Dark)         & 16 & 28.66 & 19.96 & \textbf{11.13} & \textbf{11.11 BPM} & \textbf{7.04 BPM} \\
 \midrule
-Lighting  & Incandescent (Warm 2700K)     & 16 & 25.94 & 20.23 & \textbf{19.30} & 20.34 BPM & 20.65 BPM \\
-Lighting  & LED-High (Bright White)       & 16 & 25.60 & 21.00 & \textbf{14.18} & 15.04 BPM & \textbf{8.06 BPM} \\
-Lighting  & LED-Low (Dim White)           & 16 & 28.31 & 20.57 & 17.54 & \textbf{17.08 BPM} & 16.22 BPM \\
-Lighting  & Nature (Sunlight / Shadows)   & 16 & 33.56 & 15.11 & 12.68 & \textbf{11.51 BPM} & \textbf{7.77 BPM} \\
+Lighting  & Incandescent (Warm 2700K)     & 16 & 25.94 & 20.23 & \textbf{19.30} & 19.27 BPM & 15.87 BPM \\
+Lighting  & LED-High (Bright White)       & 16 & 25.60 & 21.00 & \textbf{14.18} & 15.83 BPM & \textbf{8.06 BPM} \\
+Lighting  & LED-Low (Dim White)           & 16 & 28.31 & 20.57 & 17.54 & \textbf{17.54 BPM} & 16.87 BPM \\
+Lighting  & Nature (Sunlight / Shadows)   & 16 & 33.56 & 15.11 & 12.68 & \textbf{12.42 BPM} & \textbf{9.08 BPM} \\
 \midrule
-Motion    & Rotation (Head Turn $\pm 30^\circ$) & 16 & 22.58 & 19.20 & \textbf{11.43} & 11.75 BPM & \textbf{6.69 BPM} \\
-Motion    & Stationary (Resting Pose)     & 16 & 21.02 & 14.27 & \textbf{13.94} & 14.02 BPM & 14.88 BPM \\
-Motion    & Talking (Speech / Jaw Motion) & 16 & 25.51 & 16.99 & 13.14 & \textbf{12.95 BPM} & \textbf{11.53 BPM} \\
-Motion    & Walking (Full-Body Sway)      & 16 & 44.32 & 26.43 & \textbf{25.20} & 25.26 BPM & 23.81 BPM \\
+Motion    & Rotation (Head Turn $\pm 30^\circ$) & 16 & 22.58 & 19.20 & \textbf{11.43} & 13.69 BPM & \textbf{11.65 BPM} \\
+Motion    & Stationary (Resting Pose)     & 16 & 21.02 & 14.27 & 13.94 & \textbf{13.16 BPM} & \textbf{6.38 BPM} \\
+Motion    & Talking (Speech / Jaw Motion) & 16 & 25.51 & 16.99 & 13.14 & \textbf{13.07 BPM} & \textbf{11.53 BPM} \\
+Motion    & Walking (Full-Body Sway)      & 16 & 44.32 & 26.43 & \textbf{25.20} & 25.15 BPM & 23.08 BPM \\
 \midrule
-\textbf{Pooled} & \textbf{All 64 Operational Trials} & \textbf{64} & \textbf{28.36} & \textbf{19.23} & \textbf{15.93} & \textbf{15.99 BPM} & \textbf{14.07 BPM} \\
+\textbf{Pooled} & \textbf{All 64 Operational Trials} & \textbf{64} & \textbf{28.36} & \textbf{19.23} & \textbf{15.93} & \textbf{16.27 BPM} & \textbf{12.21 BPM} \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
 
-As reported in Table~\ref{tab:mmpd_summary}, across all 64 operational trials the FaceVitals Hybrid achieves a pooled MAE of $\mathbf{15.99\text{ BPM}}$ ($\text{MedAE} = \mathbf{14.07\text{ BPM}}$), outperforming standalone classical POS ($28.36\text{ BPM}$, a $43.6\%$ error reduction) and CHROM ($19.23\text{ BPM}$, a $16.9\%$ reduction), while matching its deep neural anchor ME-rPPG ($15.93\text{ BPM}$). Stratum-wise, the hybrid achieves strong accuracy across Fitzpatrick III ($9.45\text{ BPM}$), Nature lighting ($11.51\text{ BPM}$), and Rotation ($11.75\text{ BPM}$), demonstrating cross-domain stability on real mobile capture.
+As reported in Table~\ref{tab:mmpd_summary}, across all 64 operational trials the FaceVitals Hybrid achieves a pooled MAE of $\mathbf{16.27\text{ BPM}}$ ($\text{MedAE} = \mathbf{12.21\text{ BPM}}$), outperforming standalone classical POS ($28.36\text{ BPM}$, a $42.6\%$ error reduction) and CHROM ($19.23\text{ BPM}$, a $15.4\%$ reduction), while closely tracking its deep neural anchor ME-rPPG ($15.93\text{ BPM}$). Stratum-wise, the hybrid achieves strong accuracy across Fitzpatrick III ($11.52\text{ BPM}$), Fitzpatrick VI ($11.11\text{ BPM}$), Nature lighting ($12.42\text{ BPM}$), and Rotation ($13.69\text{ BPM}$), demonstrating cross-domain stability on real mobile capture.
 
 \subsubsection{Physical Analysis of Non-Stationary Cardiac Recovery ($N=16$)}
 In the 16 post-exercise trials, subjects were recorded immediately following intense physical exertion while heart rate decelerated rapidly across the 15-second window. In this non-stationary regime, single-frequency Fourier models blur spectral energy across $50\text{ BPM}$. Pairwise defection and harmonic exclusion caps prevent comb-filter divergence, preserving stability for future dynamic chirped tracking.
