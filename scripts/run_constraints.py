@@ -291,6 +291,7 @@ def main():
     decision_log_records = []
 
     for lux in lux_levels:
+        np.random.seed(1000 + int(lux))
         errs_chr, errs_hyb, skin_adcs = [], [], []
         for item in cohort:
             fps = item["fps"]

@@ -43,6 +43,7 @@ class HybridRPPGSystem:
         enable_pfd: bool = True,
         enable_czt: bool = True,
         enable_beatformer: bool = True,
+        defection_w_me: float = 0.10,
         verbose: bool = False,
     ):
         self.fs = float(fs)
@@ -55,6 +56,7 @@ class HybridRPPGSystem:
         self.enable_pfd = bool(enable_pfd)
         self.enable_czt = bool(enable_czt)
         self.enable_beatformer = bool(enable_beatformer)
+        self.defection_w_me = float(defection_w_me)
         self.verbose = bool(verbose)
 
         self.backbone = MERPPGEngine(
@@ -193,68 +195,65 @@ class HybridRPPGSystem:
             p_pos_norm = psd_pos / (np.max(psd_pos) + 1e-12)
             p_bf_norm = psd_bf / (np.max(psd_bf) + 1e-12)
 
-            # 1. Pairwise Independent-Branch Defection (CHROM ∧ BeatFormer):
+            # In-band spectral concentration quality gate (unit-proof +/-6 BPM window):
+            is_hz = (freqs_czt[-1] < 10.0)
+            bin_hz = float(freqs_czt[1] - freqs_czt[0]) if is_hz else float(freqs_czt[1] - freqs_czt[0]) / 60.0
+            bin_rad = max(1, int(round((6.0 / 60.0) / bin_hz)))
+
+            chr_peak_idx = int(np.argmax(psd_chr))
+            i_lo_chr = max(0, chr_peak_idx - bin_rad)
+            i_hi_chr = min(len(psd_chr), chr_peak_idx + bin_rad + 1)
+            conc_chr = float(np.sum(psd_chr[i_lo_chr:i_hi_chr])) / (float(np.sum(psd_chr)) + 1e-12)
+
+            bf_peak_idx = int(np.argmax(psd_bf))
+            i_lo_bf = max(0, bf_peak_idx - bin_rad)
+            i_hi_bf = min(len(psd_bf), bf_peak_idx + bin_rad + 1)
+            conc_bf = float(np.sum(psd_bf[i_lo_bf:i_hi_bf])) / (float(np.sum(psd_bf)) + 1e-12)
+
+            # ============================================================
+            # PAIRWISE DEFECTION — v0.7.1 APPROVED SPECIFICATION (FINAL)
+            # Modification of this block is PROHIBITED after 2026-10-18.
+            # ============================================================
             pairwise_agree = abs(hr_chr - hr_bf) <= 4.0
             consensus_hr = 0.5 * (hr_chr + hr_bf)
 
-            # Comprehensive Harmonic Exclusion Guard (1/2, 2x, 2/3, 3/2):
+            # Harmonic exclusion guard: four ratios, +/-3.0 BPM windows
             harmonic_of_anchor = (
-                abs(consensus_hr - 0.5 * hr_me) <= 3.0 or
-                abs(consensus_hr - 2.0 * hr_me) <= 3.0 or
-                abs(consensus_hr - (2.0 / 3.0) * hr_me) <= 3.0 or
-                abs(consensus_hr - 1.5 * hr_me) <= 3.0
+                abs(consensus_hr - 0.5 * hr_me) <= 3.0
+                or abs(consensus_hr - 2.0 * hr_me) <= 3.0
+                or abs(consensus_hr - (2.0 / 3.0) * hr_me) <= 3.0
+                or abs(consensus_hr - 1.5 * hr_me) <= 3.0
             )
             if harmonic_of_anchor:
                 pairwise_agree = False
 
             anchor_far = abs(hr_me - consensus_hr) > 3.5
 
-            # Dual Guard: Anchor confirmation by POS prevents false defection when anchor is valid
-            pos_confirms_anchor = (abs(hr_pos - hr_me) <= 3.5)
+            # FLAT concentration threshold. No luminance branch. No exceptions.
+            secondary_conf = max(conc_chr, conc_bf) >= 0.30
 
-            # 2. In-band spectral concentration quality gate with luminance calibration:
-            chr_peak_idx = int(np.argmax(psd_chr))
-            bin_radius = int(round(6.0 / (freqs_czt[1] - freqs_czt[0])))
-            i_lo_chr = max(0, chr_peak_idx - bin_radius)
-            i_hi_chr = min(len(psd_chr), chr_peak_idx + bin_radius + 1)
-            conc_chr = float(np.sum(psd_chr[i_lo_chr:i_hi_chr])) / (float(np.sum(psd_chr)) + 1e-12)
-
-            bf_peak_idx = int(np.argmax(psd_bf))
-            i_lo_bf = max(0, bf_peak_idx - bin_radius)
-            i_hi_bf = min(len(psd_bf), bf_peak_idx + bin_radius + 1)
-            conc_bf = float(np.sum(psd_bf[i_lo_bf:i_hi_bf])) / (float(np.sum(psd_bf)) + 1e-12)
-
-            skin_adc = float(np.mean(rgb_trace)) if rgb_trace is not None else 100.0
-            conf_thresh = 0.30 if skin_adc < 35.0 else 0.15
-            secondary_conf = max(conc_chr, conc_bf) >= conf_thresh
-
-            defection_reason = None
-            if pairwise_agree and anchor_far and secondary_conf and not pos_confirms_anchor:
+            if pairwise_agree and anchor_far and secondary_conf:
                 defection_fired = True
                 defection_reason = "pairwise_chrom_beatformer_consensus"
-                if self.verbose:
-                    print(f"  [DEFECTION FIRING] Secondary consensus accepted: CHROM={hr_chr:.1f}, BF={hr_bf:.1f} vs Anchor ME={hr_me:.1f} (Conc={max(conc_chr, conc_bf):.2f})")
-                w_me = 0.10
-                w_chr = 0.65
-                w_bf = 0.25
-                w_pos = 0.00
-                final_hr = float(w_me * hr_me + w_chr * hr_chr + w_bf * hr_bf)
-                # BVP waveform synthesized from concurring secondary pair to maintain BVP CZT peak consistency
-                fused_bvp = (0.70 * bvp_chr[:t_len] + 0.30 * bvp_bf[:t_len])
-                fused_psd = (0.70 * p_chr_norm + 0.30 * p_bf_norm)
+                w_me_d, w_chr_d, w_bf_d = 0.10, 0.65, 0.25
+                final_hr = (w_me_d * hr_me + w_chr_d * hr_chr + w_bf_d * hr_bf)
+                fused_bvp = 0.70 * bvp_chr[:t_len] + 0.30 * bvp_bf[:t_len]
+                fused_psd = 0.70 * p_chr_norm + 0.30 * p_bf_norm
+                w_me, w_chr, w_bf, w_pos = w_me_d, w_chr_d, w_bf_d, 0.0
             else:
-                if pairwise_agree and anchor_far and pos_confirms_anchor:
-                    defection_reason = f"pos_confirms_anchor (|hr_pos - hr_me|={abs(hr_pos - hr_me):.2f} <= 3.5)"
-                elif pairwise_agree and anchor_far and not secondary_conf:
-                    defection_reason = f"secondary_too_diffuse (max_conc={max(conc_chr, conc_bf):.2f} < {conf_thresh:.2f})"
-                elif pairwise_agree and not anchor_far:
-                    defection_reason = f"anchor_not_isolated (|hr_me - consensus_hr|={abs(hr_me - consensus_hr):.2f} <= 3.5)"
-                elif not pairwise_agree and harmonic_of_anchor:
-                    defection_reason = f"harmonic_of_anchor (consensus={consensus_hr:.1f}, anchor={hr_me:.1f})"
-                elif not pairwise_agree and anchor_far:
-                    defection_reason = f"no_pairwise_agree (|chr-bf|={abs(hr_chr-hr_bf):.1f} > 4.0)"
+                defection_fired = False
+                if abs(hr_chr - hr_bf) > 4.0:
+                    defection_reason = "no_pairwise_agree"
+                elif harmonic_of_anchor:
+                    defection_reason = "harmonic_guard"
+                elif abs(hr_me - consensus_hr) <= 3.5:
+                    defection_reason = "anchor_not_far"
                 else:
-                    defection_reason = "anchor_concurrence"
+                    defection_reason = "low_concentration"
+                # Anchor-gated fallback: UNCHANGED from current code
+                # w_me=1.00; w_chr=0.25 if |hr_chr-hr_me|<=3.5 else 0.0;
+                # w_pos=0.06 if |hr_pos-hr_me|<=3.5 else 0.0;
+                # w_bf=0.15  if |hr_bf-hr_me|<=3.5  else 0.0
                 w_me = 1.00
                 w_chr = 0.25 if abs(hr_chr - hr_me) <= 3.5 else 0.0
                 w_pos = 0.06 if abs(hr_pos - hr_me) <= 3.5 else 0.0
@@ -303,7 +302,6 @@ class HybridRPPGSystem:
             consensus_hr = None
             pairwise_agree = False
             anchor_far = False
-            pos_confirms_anchor = False
             secondary_conf = False
             conc_chr = None
             conc_bf = None
@@ -340,7 +338,6 @@ class HybridRPPGSystem:
             "defection_reason": defection_reason,
             "pairwise_agree": bool(pairwise_agree),
             "anchor_isolated": bool(anchor_far),
-            "pos_confirms_anchor": bool(pos_confirms_anchor),
             "confident_secondary": bool(secondary_conf),
             "conc_chr": float(conc_chr) if conc_chr is not None else None,
             "conc_bf": float(conc_bf) if conc_bf is not None else None,
