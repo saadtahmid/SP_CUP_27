@@ -297,6 +297,9 @@ def evaluate_mmpd(
     output_dir: Optional[str] = "artifacts/cross_dataset",
     max_subjects: Optional[int] = None,
     max_frames: int = 450,
+    post_exercise_only: bool = False,
+    defection_w_me: float = 0.10,
+    out: Optional[str] = None,
 ) -> pd.DataFrame:
     """Benchmark FaceVitals Hybrid v4 and baseline classical methods on real MMPD recordings."""
     print("================================================================================")
@@ -308,6 +311,9 @@ def evaluate_mmpd(
     if len(recordings) == 0:
         print(f"[!] No MMPD recordings found in {data_dir}.")
         return pd.DataFrame()
+
+    if post_exercise_only:
+        recordings = [r for r in recordings if "Stationary (after exercise)" in loader.parse_mmpd_mat(r["mat_path"]).get("motion", "")]
 
     if max_subjects:
         unique_subjs = sorted(list(set(r["recording_id"].split("_")[0] for r in recordings)))[:max_subjects]
@@ -336,7 +342,13 @@ def evaluate_mmpd(
         pipe_pos = ClassicalRPPGPipeline(method="POS", fs=fps, use_czt=True)
         pipe_chrom = ClassicalRPPGPipeline(method="CHROM", fs=fps, use_czt=True)
         me_engine = MERPPGEngine(fs=fps)
-        hybrid_sys = HybridRPPGSystem(fs=fps, enable_pfd=True, enable_czt=True, enable_beatformer=True)
+        hybrid_sys = HybridRPPGSystem(
+            fs=fps,
+            enable_pfd=True,
+            enable_czt=True,
+            enable_beatformer=True,
+            defection_w_me=defection_w_me,
+        )
 
         hr_pos = pipe_pos.process(fused_rgb)["hr_bpm"]
         hr_chrom = pipe_chrom.process(fused_rgb)["hr_bpm"]
@@ -376,7 +388,11 @@ def evaluate_mmpd(
         })
 
     df = pd.DataFrame(results)
-    if output_dir:
+    if out:
+        out_p = Path(out)
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out_p, index=False)
+    elif output_dir:
         out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         df.to_csv(out_dir / "mmpd_results.csv", index=False)
@@ -532,7 +548,8 @@ def evaluate_mmpd(
     })
 
     sum_df = pd.DataFrame(summary_rows)
-    if output_dir:
+    if not out and output_dir:
+        out_dir = Path(output_dir)
         sum_df.to_csv(out_dir / "mmpd_summary.csv", index=False)
         # Also write separate dedicated operational and post-exercise CSVs
         sum_df[sum_df["cohort"] == "Operational"].to_csv(out_dir / "mmpd_operational_summary.csv", index=False)
@@ -566,6 +583,12 @@ def main():
                         help="Max frames per video sequence (default: 450 = 15s)")
     parser.add_argument("--synthetic", action="store_true",
                         help="Run synthetic evaluation if raw dataset is not downloaded")
+    parser.add_argument("--post-exercise-only", action="store_true",
+                        help="Evaluate only post-exercise recovery sessions")
+    parser.add_argument("--defection-w-me", type=float, default=0.10,
+                        help="Defection mode anchor weight w_me (default: 0.10)")
+    parser.add_argument("--out", type=str, default=None,
+                        help="Explicit destination CSV file path")
     args = parser.parse_args()
 
     if args.dataset in ["pure", "both"]:
@@ -585,6 +608,9 @@ def main():
             output_dir=args.output_dir,
             max_subjects=args.max_subjects,
             max_frames=args.max_frames,
+            post_exercise_only=args.post_exercise_only,
+            defection_w_me=args.defection_w_me,
+            out=args.out,
         )
 
 

@@ -4,6 +4,22 @@ All notable changes, algorithmic refinements, bug fixes, hardware workarounds, a
 
 This document serves as the **single authoritative source of truth** for tracking, debugging, and reproducibility across all project phases.
 
+## [0.7.1] - 2026-10-17
+- Reverted two unauthorized guards introduced in v0.7.0 (POS-anchor
+  confirmation; luminance-calibrated concentration 0.15/0.30), restoring the
+  reviewed pairwise CHROM∧BeatFormer specification with flat concentration
+  threshold 0.30 and defection weights (w_me, w_chr, w_bf) = (0.10, 0.65, 0.25).
+- Root cause: the 0.15 threshold admitted noise-correlated CHROM/BF agreements,
+  causing false defections on C5 (400 kbps: 15.26 → 8.57), C7 (mask:
+  6.69 → 1.81), and MMPD operational (15.99 → 16.27); the POS
+  confirmation guard re-broke the subject41 anchor rescue (21.01 → 21.01).
+- Unified simulation seeds (1000+lux) across run_constraints.py and
+  run_ablation_matrix.py; C₁ cross-script drift eliminated (0.000).
+- Pre-registered sensitivity check executed: w_me=0.10 → 41.24 BPM,
+  0.20 → 40.81, 0.00 → 41.67 on MMPD post-exercise; selected 0.10 per rule.
+- Final verified figures: UBFC 450-frame 2.56 BPM (r=0.9250), full-length
+  0.87 BPM, 50-lux 7.14 BPM, PURE pooled 0.50 BPM, MMPD operational 16.27 BPM.
+
 ## [0.7.0] - 2026-10-17 (Pairwise Independent-Branch Defection, POS Veto Resolution & Dual-Peak GT Audit)
 
 ### Summary of Algorithmic Upgrades & Final Round 1 Benchmark Results

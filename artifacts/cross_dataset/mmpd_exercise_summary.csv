@@ -1,6 +1,0 @@
-cohort,dimension,condition,count,pos_mae,chrom_mae,me_mae,hybrid_mae,hybrid_medae,hybrid_rmse,hybrid_pearson_r
-Post-Exercise,Skin Tone,Fitzpatrick III,4,26.417,22.673,8.857,20.361,16.2,23.351,0.87
-Post-Exercise,Skin Tone,Fitzpatrick IV,4,52.084,51.184,52.553,51.585,48.026,53.632,-0.5905
-Post-Exercise,Skin Tone,Fitzpatrick V,4,78.673,69.703,62.167,68.647,61.876,73.249,-0.5495
-Post-Exercise,Skin Tone,Fitzpatrick VI,4,42.475,44.557,38.322,41.624,45.112,42.81,0.9208
-Post-Exercise,Pooled,All 16 Post-Exercise Trials,16,49.912,47.029,40.475,45.554,44.341,51.527,-0.4321

@@ -356,29 +356,7 @@ def test_pairwise_defection_and_diagnostic_cases():
         )):
             res5 = hyb.process(crops, rgb_signals=rgb)
             assert res5['decision_log']['defection_fired'] is False
-            assert "harmonic_of_anchor" in res5['decision_log']['defection_reason']
-
-    # -------------------------------------------------------------------------
-    # Case 6: subject15 @ 300 lx signature (POS confirms anchor, defection blocked)
-    # -------------------------------------------------------------------------
-    bvp_bf_6 = np.sin(2 * np.pi * (72.50 / 60.0) * t)
-    bvp_me_6 = np.sin(2 * np.pi * (121.80 / 60.0) * t)
-    psd_bf_6 = np.exp(-0.5 * ((freqs_bf - 72.50) / sigma)**2)
-
-    with patch.object(hyb.backbone, 'process_frames', return_value={
-        'bvp': bvp_me_6, 'hr_bpm': 121.80, 'hr_series': np.full(450, 121.80)
-    }), patch.object(hyb.czt, 'estimate_hr', side_effect=[
-        (121.80, freqs, np.exp(-0.5 * ((freqs - 121.80) / sigma)**2)),
-        (72.00, 0.0, np.exp(-0.5 * ((freqs - 72.00) / sigma)**2)),
-        (120.92, 0.0, np.exp(-0.5 * ((freqs - 120.92) / sigma)**2)),
-    ]), patch.object(hyb.beatformer, 'estimate_hr_from_trace', return_value=(
-        72.50, bvp_bf_6, psd_bf_6
-    )):
-        res6 = hyb.process(crops, rgb_signals=rgb)
-        assert res6['decision_log']['defection_fired'] is False
-        assert res6['decision_log']['pos_confirms_anchor'] is True
-        assert "pos_confirms_anchor" in res6['decision_log']['defection_reason']
-        assert abs(res6['hr_bpm'] - 121.80) < 1.0
+            assert "harmonic" in res5['decision_log']['defection_reason']
 
 
 

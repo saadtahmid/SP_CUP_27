@@ -33,11 +33,5 @@ artifacts/constraints/*.mp4
 env/
 venv/
 
-# Large binaries and papers for ultra-lean hub import
-*.mat
-submission/Round1_Baseline/*.mat
-papers/
-
 # Release and patch archives / directories
 FaceVitals_*
-

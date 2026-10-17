@@ -1,7 +1,0 @@
-protocol_code,protocol_name,count,pos_mae,chrom_mae,hybrid_mae,hybrid_medae,hybrid_rmse,hybrid_pearson_r
-01,Steady,4,0.29,0.096,0.377,0.234,0.484,0.9999
-02,Talking,4,3.137,1.838,1.629,1.333,2.05,0.9958
-03,Slow Translation,4,0.222,0.394,0.045,0.036,0.051,1.0
-04,Fast Translation,4,0.487,0.384,0.553,0.365,0.703,0.9993
-05,Small Rotation,4,0.17,0.209,0.167,0.146,0.182,0.9998
-06,Medium Rotation,4,0.625,0.523,0.244,0.247,0.271,1.0
